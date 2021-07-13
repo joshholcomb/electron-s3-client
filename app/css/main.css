@@ -1,0 +1,34 @@
+  
+h1 
+{
+    text-align: center;
+}
+  
+p 
+{
+    font-family: verdana;
+    font-size: 20px;
+}
+
+@media (min-width: 768px)
+{
+    .row-relative { position: relative; }
+
+    .col-border-padding { padding-left: 15px }
+
+    .col-border
+    {
+        padding-left: 0;
+        position: static;
+    }
+
+    .col-border:before
+    {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        border: 1px solid black;
+    }
+
+}

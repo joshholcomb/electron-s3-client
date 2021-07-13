@@ -1,0 +1,7 @@
+{
+    "s3": {
+        "accessKey": "key",
+        "secretAccessKey": "secret-key",
+        "endpoint": "https://my-endpoint-url"
+    }
+}

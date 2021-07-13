@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <link rel="stylesheet" href="../node_modules/bootstrap/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="./css/main.css">
+
+    <title>electron-s3-client</title>
+  </head>
+
+  <body>
+    <div class="container-fluid">
+    
+      <div class="text-center">
+        <h1 id="proj">electron-s3-client</h1>
+      </div>
+
+      <div class=form-group>
+        <div class="row row-relative">
+          <div class="col-xs-5">
+            <label id="endpoint">aws endpoint:</label>
+            <input type="text" class="form-control input-sm" id="txtEndpoint"/>
+          </div>
+          <div class="col-xs-3 col-border">
+            <div class = "col-border-padding">
+              <label id="endpoint">aws access key:</label>
+              <input type="text" class="form-control input-sm" id="txtAccessKey"/>
+            </div>
+          </div>
+          <div class="col-xs-3 col-border">
+            <div class = "col-border-padding">
+              <label id="endpoint">aws secret access key:</label>
+              <input type="password" class="form-control input-sm" id="txtSecretAccessKey"/>
+            </div>
+          </div>
+        </div>
+        <div class="row row-relative">
+            <div class="col-xs-5">
+              <label for="srcFolder">local folder:</label>
+              <input type='file' id="dirs" style="display:none" onchange="updateFolder()" webkitdirectory />
+              <input type="text" class="form-control input-sm" id="txtLocalFolder">
+              <button style="display:block;width:110px; height:25px;" onclick="document.getElementById('dirs').click()">select folder</button>
+              <br>
+            </div>
+            <div class="col-xs-3 col-border">
+              <div class = "col-border-padding">
+                <label for="inputTgtBucket">s3 bucket:</label>
+                <input type="text" class="form-control input-sm" id="txtBucket" placeholder="">
+              </div>
+            </div>
+            <div class="col-xs-3 col-border">
+              <div class="col-xs-3">
+                <label class="form-check-label" for="encryptCheckBox">encrypt:</label>
+                <input type="checkbox" class="form-check-input" id="encryptCheckBox">
+              </div>
+            </div>
+        </div> <!-- end row -->
+
+        <div class="row row-relative">
+          <div class="col-xs-3">
+            <button type="submit" class="btn btn-primary" onclick=backupButton()>backup</button>
+          </div>
+          <div class="col-xs-3">
+            <button type="submit" class="btn btn-primary" onclick=lsBucketButton()>list objects</button>
+          </div>
+          <div class="col-xs-3">
+            <button type="submit" class="btn btn-primary" onclick=clearConsoleButton()>clear console</button>
+          </div>
+          <div class="col-xs-3">
+            <button type="submit" class="btn btn-primary" onclick=stopButton()>stop</button>
+          </div>
+        </div>
+
+        <div class="row row-relative">
+          <div class="col-sm-12">
+            <hr/>
+          </div>
+        </div>
+
+        <div class="row row-relative">
+          <div class="col-sm-12">
+            <p>console:</p>
+            <textarea cols="130" rows="15" id="txtConsole"></textarea>
+          </div>
+        </div>
+      </div>  <!-- end form-group -->
+    </div> <!-- end container-fluid -->
+  </div>
+
+
+    <!-- include backing js file -->
+    <script src="index.js"></script>
+
+    <!-- include the js files for bootstrap -->
+    <script src="renderer.js"></script>
+  </body>
+
+</html>

@@ -1,0 +1,30 @@
+{
+    "name": "electron-s3-client",
+    "version": "1.0.0",
+    "description": "electron based s3 client",
+    "main": "main.js",
+    "scripts": {
+        "start": "electron .",
+        "package-linux": "electron-packager . proj1 --overwrite --asar=true --platfom=linux --arc=x64 --prune=true --out=release-builds",
+        "package-windows": "electron-packager . proj1 --overwrite --asar=true --platform=windows --arc=x64 --prune=true --out=release-builds"
+    },
+    "author": "holcomb",
+    "license": "ISC",
+    "devDependencies": {
+        "axios": "^0.18.0",
+        "bootstrap": "^3.4.1",
+        "electron": "^4.2.12",
+        "electron-packager": "^13.0.1"
+    },
+    "dependencies": {
+        "axios": "^0.18.0",
+        "electron-node-config": "^1.1.0",
+        "electron-notifications": "^1.0.0",
+        "electron-packager": "^13.0.1",
+        "fs": "*",
+        "https": "^1.0.0",
+        "jquery": "^3.3.1",
+        "popper.js": "^1.14.6",
+        "s3-client": "^4.4.2"
+    }
+}
