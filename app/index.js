@@ -2,13 +2,18 @@
 
 //
 // global variables
+//
 const { data } = require('jquery');
-var nodeConsole = require('console');       // for access to console
-var myConsole = new nodeConsole.Console(process.stdout, process.stderr);
+var nodeConsole = require('console');           // for access to console
+var myConsole = new nodeConsole.Console(process.stdout, process.stderr); // for console logging
 let config = require('electron-node-config');   // for configuration
-const path = require("path");
-const fs   = require("fs");
+const path = require("path");                   
+const fs   = require("fs");                     // for filesystem work
+const crypto = require("crypto");               // for encrypting files
 let runStatus = true;
+// end globals
+
+
 
 //
 // set input text values on default
@@ -118,7 +123,7 @@ function awsConnect() {
     var customAgent = new https.Agent({ ca: fileContents});
     try {
         AWS.config.update({
-            httpOptions: { agent: customAgent }
+            httpOptions: { agent: customAgent}
         });
     } catch (err) {
         myConsole.log(err.stack);
@@ -149,7 +154,8 @@ function listBucketContents(bucket) {
     let s3 = awsConnect();
 
     var params = {
-        Bucket: bucket
+        Bucket: bucket,
+        Delimiter: "/"
     };
 
     myConsole.log("listing bucket contents for bucket: " + bucket);
@@ -157,17 +163,23 @@ function listBucketContents(bucket) {
         if (err) {
             myConsole.log(err, err.stack);
         } else {
-            consoleAppend("files found: " + data.Contents.length);
-            
+            consoleAppend("folders found: " + data.CommonPrefixes.length);
             var j = 0;
-            data.Contents.forEach(function(i) {
+            data.CommonPrefixes.forEach(function(i) {
                 j++;
-                consoleAppend(j + " - file: " + i.Key);
+                consoleAppend(j + " - folder: " + i.Prefix);
             });
         }
     });
 
     return data;
+}
+
+function testButton() {
+    let doEncrypt = document.getElementById("encryptCheckBox").checked;
+    myConsole.log("doEncrypt: " + doEncrypt);
+    let encryptDir = config.get("encryption.encryptionFolder");
+    alert("doEncrypt: " + doEncrypt + " - encryptionDir: [" + encryptDir + "]");
 }
 
 // upload a file to s3 endpoint
@@ -199,6 +211,25 @@ const uploadFilesToS3 = async function (bucket, folderName) {
 
         // upload if necessary
         if (doUpload === true) {
+            // see if we need to encrypt
+            let doEncrypt = document.getElementById("encryptCheckBox").checked;
+            myConsole.log("doEncrypt: " + doEncrypt);
+
+            if (doEncrypt === true) {
+                let encryptDir = config.get("encryption.encryptionFolder");
+                let encFile = encryptDir + z + ".enc";
+                encFile = encFile.replace(/\//g, '\\');
+                let key = config.get("encryption.key");
+                var cipher = crypto.createCipheriv('aes-256-cbc', key);
+                var input = fs.createReadStream(f);
+                var output = fs.createWriteStream(encFile);
+                input.pipe(cipher).pipe(output);
+
+                output.on('finish', function() {
+                    myConsole.log("encrypted file [" + f + "] to [" + encFile + "]");
+                });
+            }
+
             var params = {Bucket: bucket, Key: z, Body: f};
             try {
                 const data = await s3.upload(params).promise();
@@ -217,8 +248,12 @@ const uploadFilesToS3 = async function (bucket, folderName) {
 // analyze the file and see if we need to upload
 //
 async function analyzeFile(f, targetObject, s3, bucket) {
+    // default action
     let doUpload = true;
+
+    // checks - status values
     let objectExists = false;
+    let s3Outdated = false;
 
     myConsole.log("analyzing file: " + f);
 
@@ -231,43 +266,45 @@ async function analyzeFile(f, targetObject, s3, bucket) {
 
     // see if object exists
     let s3LastModified = null;
-    await s3.headObject(params, function(err, data) {
-        if (err) {
-            myConsole.log(err, err.stack);
-        } else {
-            //myConsole.log(data);
-            objectExists = true;
-            // get lastModified
-            s3LastModified = data.LastModified;
-        }
-    }).promise();
-    
 
+    try {
+        await s3.headObject(params).promise();
+    } catch (err) {
+        if (err.code === 'NotFound') {
+            myConsole.log("\tobject [" + targetObject + "] - NotFound");
+            return doUpload;
+        }
+    }
+
+    objectExists = true;
+            
     // see if local timestamp is newer
+    s3LastModified = data.LastModified;
     localFileLastModified = null;
     try {
         let stats = fs.statSync(f);
         localFileLastModified = stats.mtime;
+
+        let localDate = new Date(localFileLastModified);
+        let s3Date = new Date(s3LastModified);
+        if (localDate > s3Date) {
+            s3Outdated = true;
+            myConsole.log("\ts3 file is outdated");
+        } else {
+            myConsole.log("\ts3 file is current");
+        }
     } catch (error) {
         myConsole.log("error getting local file mtime.");
     }
     
-    let s3Outdated = false;
-    let localDate = new Date(localFileLastModified);
-    let s3Date = new Date(s3LastModified);
-    if (localDate > s3Date) {
-        s3Outdated = true;
-        myConsole.log("\ts3 file is outdated");
-    } else {
-        myConsole.log("\ts3 file is current");
-    }
-
-
 
     // if all of our tests passed, then do not upload
     if (objectExists === true && s3Outdated === false) {
         doUpload = false;
-    } 
+    } else {
+        myConsole.log("tests failed - uploading file");
+    }
+
     return doUpload;
 }
 

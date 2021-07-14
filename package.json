@@ -18,6 +18,7 @@
     },
     "dependencies": {
         "axios": "^0.18.0",
+        "crypto": "^1.0.1",
         "electron-node-config": "^1.1.0",
         "electron-notifications": "^1.0.0",
         "electron-packager": "^13.0.1",
