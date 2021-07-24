@@ -9,7 +9,8 @@ var myConsole = new nodeConsole.Console(process.stdout, process.stderr); // for 
 let config = require('electron-node-config');   // for configuration
 const path = require("path");                   
 const fs   = require("fs");                     // for filesystem work
-const crypto = require("crypto");               // for encrypting files
+const Encryptor = require('./file-encrypt');    // file encryption
+
 let runStatus = true;
 // end globals
 
@@ -18,7 +19,6 @@ let runStatus = true;
 //
 // set input text values on default
 //
-myConsole.log("setting aws endpoint");
 var endpoint = document.getElementById("txtEndpoint");
 endpoint.value = config.get('s3.endpoint');
 var accessKey = document.getElementById("txtAccessKey");
@@ -37,7 +37,9 @@ function updateFolder() {
     lf.value = dir;
 }
 
-// test the submit button
+//
+// invoked when user clicks the list objects button
+//
 function lsBucketButton() {
     var bucket = document.getElementById("txtBucket");
     myConsole.log("bucket entered: [" + bucket.value + "]");
@@ -175,13 +177,6 @@ function listBucketContents(bucket) {
     return data;
 }
 
-function testButton() {
-    let doEncrypt = document.getElementById("encryptCheckBox").checked;
-    myConsole.log("doEncrypt: " + doEncrypt);
-    let encryptDir = config.get("encryption.encryptionFolder");
-    alert("doEncrypt: " + doEncrypt + " - encryptionDir: [" + encryptDir + "]");
-}
-
 // upload a file to s3 endpoint
 const uploadFilesToS3 = async function (bucket, folderName) {
     let s3 = awsConnect();
@@ -216,32 +211,72 @@ const uploadFilesToS3 = async function (bucket, folderName) {
             myConsole.log("doEncrypt: " + doEncrypt);
 
             if (doEncrypt === true) {
+                myConsole.log("encrypting file: " + f);
                 let encryptDir = config.get("encryption.encryptionFolder");
-                let encFile = encryptDir + z + ".enc";
+                myConsole.log("encryptionFolder: " + encryptDir);
+                let encFile = encryptDir + "\\" + z + ".enc";
                 encFile = encFile.replace(/\//g, '\\');
-                let key = config.get("encryption.key");
-                var cipher = crypto.createCipheriv('aes-256-cbc', key);
-                var input = fs.createReadStream(f);
-                var output = fs.createWriteStream(encFile);
-                input.pipe(cipher).pipe(output);
+                myConsole.log("encryptionFile: " + encFile);
+                // make sure directory exists
+                let e = encFile.substring(0, encFile.lastIndexOf("\\"));
+                myConsole.log("directory to create: " + e);
+                if (!fs.existsSync(e)) {
+                    fs.mkdirSync(e, { recursive: true});
+                }
+                myConsole.log("directory created");
 
-                output.on('finish', function() {
-                    myConsole.log("encrypted file [" + f + "] to [" + encFile + "]");
+                // now encrypt
+                
+                let encryptor = new Encryptor();
+                myConsole.log("encrypting file: [" + f + "] to [" + encFile + "]");
+                let encKey = config.get("encryption.encryptionKey");
+                encryptor.encryptFile(f, encFile, encKey);
+                
+                // and upload
+                myConsole.log("uploading encrypted file: " + encFile);
+                var params = {Bucket: bucket, Key: z, Body: encFile};
+                try {
+                    const data = await s3.upload(params).promise();
+                    consoleAppend("[ " + i + " - " + files.length + "] - uploaded [" + f + "] to [" + z + "]");
+                } catch (err) {
+                    consoleAppend("ERROR - file: " + f + " err: " + err.stack);
+                    myConsole.log("error uploading.", err);
+                }
+
+                // delete encFile
+                myConsole.log("deleting encrypted file: " + encFile);
+               
+                fs.unlink(encFile, function (err) {
+                    
                 });
-            }
-
-            var params = {Bucket: bucket, Key: z, Body: f};
-            try {
-                const data = await s3.upload(params).promise();
-                consoleAppend("[ " + i + " - " + files.length + "] - uploaded [" + f + "] to [" + z + "]");
-            } catch (err) {
-                consoleAppend("ERROR - file: " + f + " err: " + err.stack);
-                myConsole.log("error uploading.", err);
-            }
+        
+                
+            } else {
+                // do not encrypt - just upload
+                var params = {Bucket: bucket, Key: z, Body: f};
+                try {
+                    const data = await s3.upload(params).promise();
+                    consoleAppend("[ " + i + " - " + files.length + "] - uploaded [" + f + "] to [" + z + "]");
+                } catch (err) {
+                    consoleAppend("ERROR - file: " + f + " err: " + err.stack);
+                    myConsole.log("error uploading.", err);
+                }
+            }   
         } else {
             consoleAppend("[ " + i + " - " + files.length + "] - file [" + f + "] - current");
         }
     }
+}
+
+//
+// invoked when user clicks the restore button
+//
+function restoreButton() {
+    alert("not implemented.");
+}
+
+function getCipherKey(password) {
+    return crypto.createHash('sha256').update(password).digest();
 }
 
 //
@@ -266,9 +301,9 @@ async function analyzeFile(f, targetObject, s3, bucket) {
 
     // see if object exists
     let s3LastModified = null;
-
+    let data = null;
     try {
-        await s3.headObject(params).promise();
+        data = await s3.headObject(params).promise();
     } catch (err) {
         if (err.code === 'NotFound') {
             myConsole.log("\tobject [" + targetObject + "] - NotFound");
