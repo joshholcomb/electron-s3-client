@@ -1,32 +1,66 @@
 {
-    "name": "electron-s3-client",
-    "version": "1.0.0",
-    "description": "electron based s3 client",
-    "main": "main.js",
-    "scripts": {
-        "start": "electron .",
-        "package-linux": "electron-packager . proj1 --overwrite --asar=true --platfom=linux --arc=x64 --prune=true --out=release-builds",
-        "package-windows": "electron-packager . proj1 --overwrite --asar=true --platform=windows --arc=x64 --prune=true --out=release-builds"
-    },
-    "author": "holcomb",
-    "license": "ISC",
-    "devDependencies": {
-        "axios": "^0.18.0",
-        "bootstrap": "^3.4.1",
-        "electron": "^4.2.12",
-        "electron-packager": "^13.0.1"
-    },
-    "dependencies": {
-        "axios": "^0.18.0",
-        "crypto": "^1.0.1",
-        "electron-node-config": "^1.1.0",
-        "electron-notifications": "^1.0.0",
-        "electron-packager": "^13.0.1",
-        "fs": "*",
-        "https": "^1.0.0",
-        "jquery": "^3.3.1",
-        "popper.js": "^1.14.6",
-        "s3-client": "^4.4.2",
-        "zlib": "^1.0.5"
+  "name": "electron-s3-client",
+  "version": "1.0.0",
+  "description": "electron based s3 client",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron-forge start",
+    "package-linux": "electron-packager . proj1 --overwrite --asar=true --platfom=linux --arc=x64 --prune=true --out=release-builds",
+    "package-windows": "electron-packager . proj1 --overwrite --asar=true --platform=windows --arc=x64 --prune=true --out=release-builds",
+    "package": "electron-forge package",
+    "make": "electron-forge make"
+  },
+  "author": "holcomb",
+  "license": "ISC",
+  "devDependencies": {
+    "@electron-forge/cli": "^6.0.0-beta.59",
+    "@electron-forge/maker-deb": "^6.0.0-beta.59",
+    "@electron-forge/maker-rpm": "^6.0.0-beta.59",
+    "@electron-forge/maker-squirrel": "^6.0.0-beta.59",
+    "@electron-forge/maker-zip": "^6.0.0-beta.59",
+    "axios": "^0.18.0",
+    "electron": "^4.2.12"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.956.0",
+    "axios": "^0.18.0",
+    "bootstrap": "^4.6.0",
+    "crypto": "^1.0.1",
+    "electron-notifications": "^1.0.0",
+    "electron-squirrel-startup": "^1.0.0",
+    "fs": "*",
+    "https": "^1.0.0",
+    "jquery": "^3.3.1",
+    "mkdirp": "^0.5.5",
+    "popper.js": "^1.14.6",
+    "s3-client": "^4.4.2",
+    "zlib": "^1.0.5"
+  },
+  "config": {
+    "forge": {
+      "packagerConfig": {},
+      "makers": [
+        {
+          "name": "@electron-forge/maker-squirrel",
+          "config": {
+            "name": "electron_s3_client"
+          }
+        },
+        {
+          "name": "@electron-forge/maker-zip",
+          "platforms": [
+            "darwin"
+          ]
+        },
+        {
+          "name": "@electron-forge/maker-deb",
+          "config": {}
+        },
+        {
+          "name": "@electron-forge/maker-rpm",
+          "config": {}
+        }
+      ]
     }
+  }
 }

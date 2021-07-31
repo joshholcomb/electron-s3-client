@@ -6,25 +6,46 @@
 const { data } = require('jquery');
 var nodeConsole = require('console');           // for access to console
 var myConsole = new nodeConsole.Console(process.stdout, process.stderr); // for console logging
-let config = require('electron-node-config');   // for configuration
 const path = require("path");                   
-const fs   = require("fs");                     // for filesystem work
+const fs = require('fs');                     // for filesystem work
+var mkdirp = require('mkdirp');
 const Encryptor = require('./file-encrypt');    // file encryption
+const Store = require('./store');
+const { app } = require('electron');
+
+
 
 let runStatus = true;
 // end globals
 
-
+const config = new Store({
+    configName: 'default',
+    defaults: {
+        "s3": {
+            "accessKey": "josh",
+            "secretAccessKey": "test",
+            "endpoint": "myendpoint"
+        },
+        "encryption": {
+            "encryptionKey": "testkey",
+            "encryptionFolder": "folder"
+        }
+    }
+  });
 
 //
 // set input text values on default
 //
-var endpoint = document.getElementById("txtEndpoint");
-endpoint.value = config.get('s3.endpoint');
-var accessKey = document.getElementById("txtAccessKey");
-accessKey.value = config.get('s3.accessKey');
-var secretAccessKey = document.getElementById("txtSecretAccessKey");
-secretAccessKey.value = config.get('s3.secretAccessKey');
+try {
+    var endpoint = document.getElementById("txtEndpoint");
+    endpoint.value = config.get("s3.endpoint");
+    var accessKey = document.getElementById("txtAccessKey");
+    accessKey.value = config.get("s3.accessKey");
+    var secretAccessKey = document.getElementById("txtSecretAccessKey");
+    secretAccessKey.value = config.get('s3.secretAccessKey');
+} catch (err) {
+    myConsole.log(err);
+}
 
 
 // update folder information
@@ -37,20 +58,31 @@ function updateFolder() {
     lf.value = dir;
 }
 
+
+//
+// invoked when user clicks the list buckets button
+//
+function lsBucketsButton() {
+    listBuckets();
+}
+
 //
 // invoked when user clicks the list objects button
 //
-function lsBucketButton() {
+function lsObjectsButton() {
     var bucket = document.getElementById("txtBucket");
     myConsole.log("bucket entered: [" + bucket.value + "]");
     if (bucket.value.length == 0) {
         alert("bucket not entered.");
         return;
     } else {
-        listBucketContents(bucket.value);
+        listBucketFolders(bucket.value);
     }
 }
 
+//
+// invoked when user clicks the backup button
+//
 function backupButton() {
     runStatus = true;
 
@@ -77,18 +109,55 @@ function backupButton() {
     }
 }
 
+//
+// invoked when user clicks the stop button
+//
 function stopButton() {
     myConsole.log("setting runStatus = false");
     runStatus = false;
 }
 
+//
+// invoked when user clicks the clear console button
+//
 function clearConsoleButton() {
     myConsole.log("clearing console...");
     var ta = document.getElementById("txtConsole");
     ta.value = "";
 }
 
+//
+// invoked when user clicks the restore button
+//
+function restoreButton() {
+    runStatus = true;
 
+    myConsole.log("restore initiated...");
+    var dirField = document.getElementById("dirs");
+    if (dirField.value.length == 0) {
+        alert("local directory not selected..");
+        return;
+    }
+    var dir = document.getElementById("dirs").files[0].path
+    myConsole.log("directory selected: " + dir);
+
+    var bucket = document.getElementById("txtBucket");
+    if (bucket.value.length == 0) {
+        alert("bucket not entered...");
+        return;
+    }
+    myConsole.log("bucket entered: [" + bucket.value + "]");
+
+    var s3Folder = document.getElementById("txtS3Folder");
+    if (!s3Folder.value) {
+        alert("s3 folder not entered...");
+        return;
+    }
+    myConsole.log("s3 folder entered: [" + s3Folder.value + "]");
+
+    // got all input data - call restore function
+    downloadFilesFromS3(bucket.value, s3Folder.value, dir);
+}
 
 // append msg to text area for console messages
 function consoleAppend(msg) {
@@ -148,10 +217,30 @@ function awsConnect() {
     return s3;
 }
 
-// 
-// list bucket content of a given bucket name
 //
-function listBucketContents(bucket) {
+// list buckets under this account
+//
+function listBuckets() {
+    consoleAppend("listing buckets for endpoint: [" + config.get("s3.endpoint") + "]");
+    let s3 = awsConnect();
+
+    var params = {};
+    s3.listBuckets(params, function(err, data) {
+      if (err) {
+          myConsole.log(err, err.stack); // an error occurred
+      } else {
+        data.Buckets.forEach(function(i) {
+            consoleAppend("bucket: " + i.Name);
+        });
+      }
+      
+    });
+}
+
+// 
+// list bucket top level folders for a given bucket name
+//
+function listBucketFolders(bucket) {
     consoleAppend("listing bucket contents for bucket: [" + bucket + "]");
     let s3 = awsConnect();
 
@@ -177,6 +266,10 @@ function listBucketContents(bucket) {
     return data;
 }
 
+// sleep function
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
+
+
 // upload a file to s3 endpoint
 const uploadFilesToS3 = async function (bucket, folderName) {
     let s3 = awsConnect();
@@ -198,6 +291,11 @@ const uploadFilesToS3 = async function (bucket, folderName) {
         let z = x.substr(3);            // trim off first 3 such as d:\
         z = z.replace(/\\/g, '/');      // replace any \ with /
 
+        let s3Folder = document.getElementById("txtS3Folder");
+        if (s3Folder.value) {
+            z = s3Folder.value + "/" + z;
+            myConsole.log("z: " + z);
+        }
 
         // analyze the file to see if we need to upload
         // does files exist on s3 bucket.  if so, is it outdated?
@@ -208,36 +306,41 @@ const uploadFilesToS3 = async function (bucket, folderName) {
         if (doUpload === true) {
             // see if we need to encrypt
             let doEncrypt = document.getElementById("encryptCheckBox").checked;
-            myConsole.log("doEncrypt: " + doEncrypt);
+            myConsole.log("\tdoEncrypt: " + doEncrypt);
 
             if (doEncrypt === true) {
                 myConsole.log("encrypting file: " + f);
                 let encryptDir = config.get("encryption.encryptionFolder");
                 myConsole.log("encryptionFolder: " + encryptDir);
-                let encFile = encryptDir + "\\" + z + ".enc";
+                let uploadKey = z + ".enc";
+                let encFile = encryptDir + "\\" + uploadKey;
                 encFile = encFile.replace(/\//g, '\\');
-                myConsole.log("encryptionFile: " + encFile);
+                
                 // make sure directory exists
                 let e = encFile.substring(0, encFile.lastIndexOf("\\"));
-                myConsole.log("directory to create: " + e);
-                if (!fs.existsSync(e)) {
-                    fs.mkdirSync(e, { recursive: true});
-                }
+                mkdirp(e, function (err) {
+                    if (err) {
+                        myConsole.log("error creating directory: " + err);
+                    }
+                });
                 myConsole.log("directory created");
 
                 // now encrypt
-                
                 let encryptor = new Encryptor();
                 myConsole.log("encrypting file: [" + f + "] to [" + encFile + "]");
                 let encKey = config.get("encryption.encryptionKey");
                 encryptor.encryptFile(f, encFile, encKey);
+
+                await delay(1000);
                 
-                // and upload
+                // upload the encrypted file
                 myConsole.log("uploading encrypted file: " + encFile);
-                var params = {Bucket: bucket, Key: z, Body: encFile};
+                var params = {Bucket: bucket, Key: uploadKey, Body: ''};
+                var fileStream = fs.createReadStream(encFile);
+                params.Body = fileStream;
                 try {
                     const data = await s3.upload(params).promise();
-                    consoleAppend("[ " + i + " - " + files.length + "] - uploaded [" + f + "] to [" + z + "]");
+                    consoleAppend("[ " + i + " - " + files.length + "] - uploaded [" + f + "] to [" + uploadKey + "]");
                 } catch (err) {
                     consoleAppend("ERROR - file: " + f + " err: " + err.stack);
                     myConsole.log("error uploading.", err);
@@ -245,15 +348,17 @@ const uploadFilesToS3 = async function (bucket, folderName) {
 
                 // delete encFile
                 myConsole.log("deleting encrypted file: " + encFile);
-               
                 fs.unlink(encFile, function (err) {
-                    
+                    if (err) {
+                        myConsole.log("error deleting file. " + err);
+                    }
                 });
-        
                 
             } else {
                 // do not encrypt - just upload
-                var params = {Bucket: bucket, Key: z, Body: f};
+                var params = {Bucket: bucket, Key: z, Body: ''};
+                var fileStream = fs.createReadStream(f);
+                params.Body = fileStream;
                 try {
                     const data = await s3.upload(params).promise();
                     consoleAppend("[ " + i + " - " + files.length + "] - uploaded [" + f + "] to [" + z + "]");
@@ -263,17 +368,74 @@ const uploadFilesToS3 = async function (bucket, folderName) {
                 }
             }   
         } else {
-            consoleAppend("[ " + i + " - " + files.length + "] - file [" + f + "] - current");
+            consoleAppend("[ " + i + " - " + files.length + "] - file [" + f + "] - s3 object is current");
         }
     }
 }
 
-//
-// invoked when user clicks the restore button
-//
-function restoreButton() {
-    alert("not implemented.");
+const downloadFilesFromS3 = async function (bucket, folderName, localDir) {
+    let s3 = awsConnect();
+
+    var params = {
+        Bucket: bucket,
+        Prefix: folderName
+    };
+
+    myConsole.log("bucket: " + bucket + " - folder: " + folderName);
+    let data = await s3.listObjects(params).promise();
+        
+    consoleAppend("objects found: " + data.Contents.length);
+    var j = 0;
+    data.Contents.forEach(async o => {
+        j++;
+        consoleAppend(j + " - object: " + o.Key);
+
+        // download the object
+        var params = {
+            Bucket: bucket,
+            Key: o.Key
+        }
+
+        myConsole.log("assembling download directory");
+        let writeDir = localDir + "/" + o.Key.substring(0, o.Key.lastIndexOf("/"));
+        let writeFile = o.Key.substring(o.Key.lastIndexOf("/") + 1);
+        writeDir = writeDir.replace(/\//g, '\\');
+        let fullPath = writeDir + "\\" + writeFile;
+        myConsole.log("writeDir: [" + writeDir + "] - writeFile: " + writeFile);
+        myConsole.log("fullPath: " + fullPath);
+
+        mkdirp(writeDir, function (err) {
+            if (err) {
+                myConsole.log(err);
+            }
+        });
+        
+        
+        myConsole.log("piping stream");
+        let writeStream = fs.createWriteStream(fullPath);
+        s3.getObject(params).createReadStream().pipe(writeStream);
+
+        const sleep = await delay(1500);
+
+        // if encrypted - decrypt file
+        // file.enc - length = 8 - pos = 4
+        if (o.Key.substring(o.Key.length - 4) === ".enc") {
+            myConsole.log("file is encrypted. decrypting now");
+            let encryptor = new Encryptor();
+            let decryptedFile = fullPath.substring(0, fullPath.length - 4);
+         
+            encryptor.decryptFile(fullPath, 
+                decryptedFile, 
+                config.get("encryption.encryptionKey"));
+            
+            consoleAppend("decrypted file: [" + decryptedFile + "]");
+            
+        } else {
+            myConsole.log("file not encrypted - moving on.");
+        }
+    });
 }
+
 
 function getCipherKey(password) {
     return crypto.createHash('sha256').update(password).digest();
@@ -298,15 +460,12 @@ async function analyzeFile(f, targetObject, s3, bucket) {
         Key: targetObject
     };
 
-
-    // see if object exists
     let s3LastModified = null;
     let data = null;
     try {
         data = await s3.headObject(params).promise();
     } catch (err) {
         if (err.code === 'NotFound') {
-            myConsole.log("\tobject [" + targetObject + "] - NotFound");
             return doUpload;
         }
     }
