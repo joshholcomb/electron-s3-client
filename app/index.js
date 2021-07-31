@@ -300,13 +300,11 @@ const uploadFilesToS3 = async function (bucket, folderName) {
         // rename the upload folder to include subdirectories under uploadfolder
         let x = String(f);
         let z = x.substring(folderName.length + 1);  // get relative path
-        myConsole.log("after substring: " + z);
         z = z.replace(/\\/g, '/');      // replace any \ with /
 
         let s3Folder = document.getElementById("txtS3Folder");
         if (s3Folder.value) {
             z = s3Folder.value + "/" + z;
-            myConsole.log("z: " + z);
         }
 
         // analyze the file to see if we need to upload
