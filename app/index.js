@@ -98,12 +98,12 @@ function backupButton() {
     runStatus = true;
 
     myConsole.log("backup initiated...");
-    var dirField = document.getElementById("dirs");
+    var dirField = document.getElementById("txtLocalFolder");
     if (dirField.value.length == 0) {
         alert("local directory not selected..");
         return;
     }
-    var dir = document.getElementById("dirs").files[0].path
+    var dir = dirField.value;
     myConsole.log("directory selected: " + dir);
 
     var bucket = document.getElementById("txtBucket");
@@ -299,7 +299,8 @@ const uploadFilesToS3 = async function (bucket, folderName) {
 
         // rename the upload folder to include subdirectories under uploadfolder
         let x = String(f);
-        let z = x.substr(3);            // trim off first 3 such as d:\
+        let z = x.substring(folderName.length + 1);  // get relative path
+        myConsole.log("after substring: " + z);
         z = z.replace(/\\/g, '/');      // replace any \ with /
 
         let s3Folder = document.getElementById("txtS3Folder");
