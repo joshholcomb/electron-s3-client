@@ -1,6 +1,4 @@
 node_modules
-app/certs/my-ca-cert.crt
-
+config/my-ca-cert.crt
 config/default.json
-
 out/

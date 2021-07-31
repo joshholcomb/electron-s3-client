@@ -8,7 +8,8 @@ class Store {
     // app.getPath('userData') will return a string of the user's app data directory path.
     //const userDataPath = (electron.app || electron.remote.app).getPath('userData');
     // We'll use the `configName` property to set the file name and path.join to bring it all together as a string
-    this.path = path.join('./config', opts.configName + '.json');
+    var loc = process.cwd();
+    this.path = path.join(loc + '/config', opts.configName + '.json');
     this.data = parseDataFile(this.path, opts.defaults);
   }
   

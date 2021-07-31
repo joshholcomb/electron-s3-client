@@ -11,12 +11,14 @@ const fs = require('fs');                     // for filesystem work
 var mkdirp = require('mkdirp');
 const Encryptor = require('./file-encrypt');    // file encryption
 const Store = require('./store');
-const { app } = require('electron');
-
-
+const app = require('electron');
+const remote = require('electron').remote;
+const dialog = remote.dialog;
 
 let runStatus = true;
 // end globals
+
+consoleAppend("current directory: " + process.cwd());
 
 const config = new Store({
     configName: 'default',
@@ -50,12 +52,21 @@ try {
 
 // update folder information
 // fires from html when local directory value changes
-function updateFolder() {
-    var dir = document.getElementById("dirs").files[0].path
-    myConsole.log("selected local folder is: [" + dir + "]");
-    consoleAppend("selected local folder: [" + dir + "]");
+const updateFolder = async () => {
+    myConsole.log("selecting directory.");
     var lf = document.getElementById("txtLocalFolder");
-    lf.value = dir;
+
+    try {
+        const chosenFolders = await dialog.showOpenDialog({ properties: ['openDirectory']}); 
+        if (chosenFolders  && chosenFolders.canceled === false) {
+            myConsole.log("selected directory: " + chosenFolders.filePaths[0]);
+            lf.value = chosenFolders.filePaths[0];
+            consoleAppend("selected local folder: [" + chosenFolders.filePaths[0] + "]");
+        }
+    } catch (err) {
+        myConsole.log("error choosing file: " + err);
+    }
+    
 }
 
 
@@ -186,7 +197,7 @@ function awsConnect() {
     var https = require('https');
     const fs = require('fs');
     try {
-        fileContents = fs.readFileSync('app/certs/my-ca-cert.crt');
+        fileContents = fs.readFileSync('config/my-ca-cert.crt');
     } catch (err) {
         myConsole.log(err.stack);
     }
