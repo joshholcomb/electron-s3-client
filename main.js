@@ -43,8 +43,20 @@ function createWindow () {
 		{
 			label: 'Menu',
 			submenu: [
+        {
+          label: 'main',
+          click() {
+            win.loadFile('app/index.html');
+          }
+        },
+        {
+          label: 's3 connection',
+          click() {
+            win.loadFile('app/s3-connection.html');
+          }
+        },
 				{
-					label: 'clinerock',
+          label: 'clinerock',
 					click() {
 						shell.openExternal('http://www.clinerock.com')
 					}

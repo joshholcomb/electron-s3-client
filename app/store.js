@@ -23,7 +23,8 @@ class Store {
   
   // ...and this will set it
   set(key, val) {
-    this.data[key] = val;
+    const myArr = key.split(".");
+    this.data[myArr[0]][myArr[1]] = val;
     fs.writeFileSync(this.path, JSON.stringify(this.data));
   }
 }

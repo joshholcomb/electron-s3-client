@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <link rel="stylesheet" href="../node_modules/bootstrap/dist/css/bootstrap.css">
+    <link rel="stylesheet" href="./css/main.css">
+    <!-- Bootstrap Optional JavaScript -->
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+    <script src="../node_modules/jquery/dist/jquery.js"></script>
+    <script src="../node_modules/popper/dist/popper.min.js"></script>
+    <script src="../node_modules/bootstrap/js/bootstrap.min.js"></script>
+
+
+    <title>electron-s3-client</title>
+</head> 
+
+<body>
+    <div class="container-fluid">
+
+        <div class="text-center">
+        <h1 id="proj">electron-s3-client</h1>
+        <h2>s3 connection properties</h2>
+        </div>
+    </div>
+
+    <div class="form-group form-control-sm">
+        <div class="row row-relative">
+          <div class="col-sm-12">
+            <hr/>
+          </div>
+        </div>
+        
+        <div class="row row-relative">
+            <div class="col-md-4 small">
+              <label for="txtEndpoint">aws endpoint:</label>
+              <input id="txtEndpoint" type="text" class="input-sm w-50"/>
+            </div>
+        </div>
+        <div class="row row-relative">
+            <div class="col-md-4 small">
+                <label for="txtAccessKey">aws access key:</label>
+                <input type="text" class="input-sm" id="txtAccessKey"/>
+            </div>
+        </div>
+        <div class="row row-relative">
+            <div class="col-md-4 small">
+                <label for="txtSecretAccessKey">aws secret access key:</label>
+                <input type="password" class="input-sm" id="txtSecretAccessKey"/>
+            </div>
+        </div>
+
+        <div class="row row-relative">
+            <div class="col-md-4 small">
+                <button type="submit" class="btn-primary btn-sm" onclick=saveS3Connection()>save</button>
+            </div>
+        </div>
+
+        <div class="row row-relative">
+            <div class="col-sm-12">
+                <hr/>
+            </div>
+        </div>
+
+     <!-- include backing js file -->
+     <script src="s3-connection.js"></script>
+
+     <!-- include the js files for bootstrap -->
+     <script src="renderer.js"></script>
+</body>
+

@@ -35,20 +35,20 @@ const config = new Store({
     }
   });
 
-//
-// set input text values on default
-//
-try {
-    var endpoint = document.getElementById("txtEndpoint");
-    endpoint.value = config.get("s3.endpoint");
-    var accessKey = document.getElementById("txtAccessKey");
-    accessKey.value = config.get("s3.accessKey");
-    var secretAccessKey = document.getElementById("txtSecretAccessKey");
-    secretAccessKey.value = config.get('s3.secretAccessKey');
-} catch (err) {
-    myConsole.log(err);
-}
 
+
+myConsole.log("displaying s3 values.");
+let lblEndpoint = document.getElementById("lblS3Endpoint");
+lblEndpoint.textContent = config.get("s3.endpoint");
+let lblAccessKey = document.getElementById("lblS3AccessKey");
+lblAccessKey.textContent = config.get("s3.accessKey");
+let lblSecretAccessKey = document.getElementById("lblS3SecretAccessKey");
+let pass = "";
+let length = config.get("s3.secretAccessKey").length;
+for (i=0; i < length; i++) {
+    pass += "*";
+}
+lblSecretAccessKey.textContent = pass;
 
 // update folder information
 // fires from html when local directory value changes
@@ -212,9 +212,9 @@ function awsConnect() {
     }
 
     // get access creds from ui boxes
-    var accessKey = document.getElementById("txtAccessKey").value;
-    var secretAccessKey = document.getElementById("txtSecretAccessKey").value;
-    var endpoint = document.getElementById("txtEndpoint").value;
+    var accessKey = config.get("s3.accessKey");
+    var secretAccessKey = config.get("s3.secretAccessKey");
+    var endpoint = config.get("s3.endpoint");
 
     var s3  = new AWS.S3({
             accessKeyId: accessKey,
@@ -294,6 +294,7 @@ const uploadFilesToS3 = async function (bucket, folderName) {
         i++;
         if (!runStatus) {
             myConsole.log("run status is false.");
+            consoleAppend("job stopped...");
             break;
         }
 

@@ -32,70 +32,28 @@
             <hr/>
           </div>
         </div>
-        
+     
         <div class="row row-relative">
             <div class="col-md-4 small">
-              <label for="txtEndpoint">aws endpoint:</label>
-              <input id="txtEndpoint" type="text" class="input-sm w-50"/>
+              <label for="srcFolder">local folder:</label>
+              <input type="text" class="input-sm w-75" id="txtLocalFolder"/>
+              <button style="display:block;width:110px; height:25px;" onclick="updateFolder()">select folder</button>
+              <br>
             </div>
-            <div class="col-md-4 col-border small">
+            <div class="col-md-4 small col-border">
               <div class = "col-border-padding">
-                <label for="txtAccessKey">aws access key:</label>
-                <input type="text" class="input-sm" id="txtAccessKey"/>
+                <label for="inputTgtBucket">s3 bucket:</label>
+                <input type="text" class="input-sm" id="txtBucket" placeholder="">
               </div>
             </div>
-            <div class="col-md-4 col-border small">
-              <div class = "col-border-padding">
-                <label for="txtSecretAccessKey">aws secret access key:</label>
-                <input type="password" class="input-sm" id="txtSecretAccessKey"/>
+            <div class="col-md-4 small col-border">
+              <div class="col-border-padding">
+                <label for="inputTgtFolder">s3 folder:</label>
+                <input type="text" class="input-sm" id="txtS3Folder" placeholder="">
               </div>
             </div>
-          </div>
-          <div class="row row-relative">
-              <div class="col-md-4 small">
-                <label for="srcFolder">local folder:</label>
-                <input type="text" class="input-sm w-75" id="txtLocalFolder"/>
-                <button style="display:block;width:110px; height:25px;" onclick="updateFolder()">select folder</button>
-                <br>
-              </div>
-              <div class="col-md-4 small col-border">
-                <div class = "col-border-padding">
-                  <label for="inputTgtBucket">s3 bucket:</label>
-                  <input type="text" class="input-sm" id="txtBucket" placeholder="">
-                </div>
-              </div>
-              <div class="col-md-4 small col-border">
-                <div class="col-border-padding">
-                  <label for="inputTgtFolder">s3 folder:</label>
-                  <input type="text" class="input-sm" id="txtS3Folder" placeholder="">
-                </div>
-              </div>
-          </div> <!-- end row -->
+        </div> <!-- end row -->
         
-
-          <div class="row row-relative">
-            <div class="col-sm-12">
-              <hr/>
-            </div>
-          </div>
-
-       
-          <div class="row row-relative">
-            <div class="col-md-4 small">
-              <button type="submit" class="btn-primary btn-sm" onclick=backupButton()>backup</button>
-              <button type="submit" class="btn-primary btn-sm" onclick=restoreButton()>restore</button>
-            </div>
-            <div class="col-md-4 small">
-              <button type="submit" class="btn-primary btn-sm" onclick=lsBucketsButton()>list buckets</button>
-              <button type="submit" class="btn-primary btn-sm" onclick=lsObjectsButton()>list folders</button>
-              <button type="submit" class="btn-primary btn-sm" onclick=clearConsoleButton()>clear console</button>
-              <button type="submit" class="btn-primary btn-sm" onclick=stopButton()>stop</button>
-            </div>
-            <div class="col-md-4 small">
-              <input type="checkbox" class="form-check-input" id="encryptCheckBox"/>
-              <label class="form-check-label" for="encryptCheckBox">encrypt:</label>
-            </div>
-          </div>
 
         <div class="row row-relative">
           <div class="col-sm-12">
@@ -103,7 +61,42 @@
           </div>
         </div>
 
-        
+       
+        <div class="row row-relative">
+          <div class="col-md-4 small">
+            <button type="submit" class="btn-primary btn-sm" onclick=backupButton()>backup</button>
+            <button type="submit" class="btn-primary btn-sm" onclick=restoreButton()>restore</button>
+          </div>
+          <div class="col-md-4 small">
+            <button type="submit" class="btn-primary btn-sm" onclick=lsBucketsButton()>list buckets</button>
+            <button type="submit" class="btn-primary btn-sm" onclick=lsObjectsButton()>list folders</button>
+            <button type="submit" class="btn-primary btn-sm" onclick=clearConsoleButton()>clear console</button>
+            <button type="submit" class="btn-primary btn-sm" onclick=stopButton()>stop</button>
+          </div>
+          <div class="col-md-4 small">
+            <input type="checkbox" class="form-check-input" id="encryptCheckBox"/>
+            <label class="form-check-label" for="encryptCheckBox">encrypt:</label>
+          </div>
+        </div>
+
+        <div class="row row-relative">
+          <div class="col-sm-12">
+            <hr/>
+          </div>
+        </div>
+
+        <div class="row row-relative">
+          <div class="col-md-4 small">
+            <p><b>s3 endpoint:</b> <label id="lblS3Endpoint"></label></script></p>
+          </div>
+          <div class="col-md-4 small">
+            <p><b>s3 access key:</b> <label id="lblS3AccessKey"></label></p>
+          </div>
+          <div class="col-md-4 small">
+            <p><b>s3 secret access key:</b> <label id="lblS3SecretAccessKey"></label></p>
+          </div>
+        </div>
+
         <div class="row row-relative">
           <div class="col-sm-12 small">
             <p>console:</p>
