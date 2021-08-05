@@ -144,12 +144,12 @@ function restoreButton() {
     runStatus = true;
 
     myConsole.log("restore initiated...");
-    var dirField = document.getElementById("dirs");
+    var dirField = document.getElementById("txtLocalFolder");
     if (dirField.value.length == 0) {
         alert("local directory not selected..");
         return;
     }
-    var dir = document.getElementById("dirs").files[0].path
+    var dir = dirField.value;
     myConsole.log("directory selected: " + dir);
 
     var bucket = document.getElementById("txtBucket");
@@ -393,38 +393,37 @@ const downloadFilesFromS3 = async function (bucket, folderName, localDir) {
     };
 
     myConsole.log("bucket: " + bucket + " - folder: " + folderName);
-    let data = await s3.listObjects(params).promise();
+    let data = await s3.listObjectsV2(params).promise();
         
     consoleAppend("objects found: " + data.Contents.length);
     var j = 0;
-    data.Contents.forEach(async o => {
-        j++;
-        consoleAppend(j + " - object: " + o.Key);
-
-        // download the object
-        var params = {
-            Bucket: bucket,
-            Key: o.Key
+    for (let o of data.Contents) {
+        if (runStatus === false) {
+            consoleAppend("job stopped...");
+            break;
         }
 
-        myConsole.log("assembling download directory");
+        j++;
+        consoleAppend(j + " - object: " + o.Key);
         let writeDir = localDir + "/" + o.Key.substring(0, o.Key.lastIndexOf("/"));
         let writeFile = o.Key.substring(o.Key.lastIndexOf("/") + 1);
         writeDir = writeDir.replace(/\//g, '\\');
         let fullPath = writeDir + "\\" + writeFile;
-        myConsole.log("writeDir: [" + writeDir + "] - writeFile: " + writeFile);
-        myConsole.log("fullPath: " + fullPath);
+        myConsole.log("saving object to: " + fullPath);
 
         mkdirp(writeDir, function (err) {
             if (err) {
                 myConsole.log(err);
             }
         });
+
+        // download the object
+        try {
+            await downloadObject(s3, bucket, o.Key, fullPath);
+        } catch (err) {
+            myConsole.log("error downloading file: " + err);
+        }
         
-        
-        myConsole.log("piping stream");
-        let writeStream = fs.createWriteStream(fullPath);
-        s3.getObject(params).createReadStream().pipe(writeStream);
 
         const sleep = await delay(1500);
 
@@ -440,12 +439,29 @@ const downloadFilesFromS3 = async function (bucket, folderName, localDir) {
                 config.get("encryption.encryptionKey"));
             
             consoleAppend("decrypted file: [" + decryptedFile + "]");
-            
-        } else {
-            myConsole.log("file not encrypted - moving on.");
         }
+    };
+}
+
+const downloadObject = async function (s3, bucket, k, writeFile) {
+    return new Promise((resolve, reject) => {
+        let params = { Bucket: bucket, Key: k };
+        let writeStream = fs.createWriteStream(writeFile);
+        let readStream = s3.getObject(params).createReadStream();
+
+        readStream.pipe(writeStream);
+
+        readStream.on('error', function(err) {
+            reject(err);
+        });
+        
+        readStream.on('close', function() {
+            resolve();
+        });
+
     });
 }
+
 
 
 function getCipherKey(password) {
