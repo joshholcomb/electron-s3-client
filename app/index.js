@@ -384,6 +384,10 @@ const uploadFilesToS3 = async function (bucket, folderName) {
     }
 }
 
+
+//
+// download all files in a given bucket and s3 folder
+//
 const downloadFilesFromS3 = async function (bucket, folderName, localDir) {
     let s3 = awsConnect();
 
@@ -443,12 +447,14 @@ const downloadFilesFromS3 = async function (bucket, folderName, localDir) {
     };
 }
 
+//
+// download a single object from s3
+//
 const downloadObject = async function (s3, bucket, k, writeFile) {
     return new Promise((resolve, reject) => {
         let params = { Bucket: bucket, Key: k };
         let writeStream = fs.createWriteStream(writeFile);
         let readStream = s3.getObject(params).createReadStream();
-
         readStream.pipe(writeStream);
 
         readStream.on('error', function(err) {
