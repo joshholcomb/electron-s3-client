@@ -16,10 +16,16 @@ const remote = require('electron').remote;
 const dialog = remote.dialog;
 
 let runStatus = true;
+
+const pLimit = require('p-limit');
 // end globals
 
+
+
+// display current directory
 consoleAppend("current directory: " + process.cwd());
 
+// setup config
 const config = new Store({
     configName: 'default',
     defaults: {
@@ -31,12 +37,15 @@ const config = new Store({
         "encryption": {
             "encryptionKey": "testkey",
             "encryptionFolder": "folder"
+        },
+        "config": {
+            "numThreads": "3"
         }
     }
   });
 
 
-
+// initial display settings
 myConsole.log("displaying s3 values.");
 let lblEndpoint = document.getElementById("lblS3Endpoint");
 lblEndpoint.textContent = config.get("s3.endpoint");
@@ -68,7 +77,6 @@ const updateFolder = async () => {
     }
     
 }
-
 
 //
 // invoked when user clicks the list buckets button
@@ -126,6 +134,7 @@ function backupButton() {
 function stopButton() {
     myConsole.log("setting runStatus = false");
     runStatus = false;
+    consoleAppend("job stop msg sent");
 }
 
 //
@@ -216,6 +225,15 @@ function awsConnect() {
     var secretAccessKey = config.get("s3.secretAccessKey");
     var endpoint = config.get("s3.endpoint");
 
+    // set AWS timeout
+    AWS.config.update({
+        maxRetries: 2,
+        httpOptions: {
+            timeout: 240000,
+            connectTimeout: 5000,
+        },
+    })
+
     var s3  = new AWS.S3({
             accessKeyId: accessKey,
             secretAccessKey: secretAccessKey,
@@ -281,114 +299,213 @@ function listBucketFolders(bucket) {
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 
-// upload a file to s3 endpoint
-const uploadFilesToS3 = async function (bucket, folderName) {
+// upload files from a folder into an s3 endpoint
+function uploadFilesToS3(bucket, folderName) {
+    var startTime = Date.now();
+
     let s3 = awsConnect();
 
     myConsole.log("traversing directory [" + folderName + "]");
     const files = getAllFiles(folderName);
     consoleAppend("files found: [" + files.length + "]");
     
-    var i = 0;
+    let promises = [];
+    const limit = pLimit(config.get("config.numThreads"));
+
+    var fCount = 0;
     for (const f of files) {
-        i++;
+        fCount = fCount + 1;
+        const i = fCount;
+
         if (!runStatus) {
             myConsole.log("run status is false.");
             consoleAppend("job stopped...");
             break;
         }
 
-        // rename the upload folder to include subdirectories under uploadfolder
-        let x = String(f);
-        let z = x.substring(folderName.length + 1);  // get relative path
-        z = z.replace(/\\/g, '/');      // replace any \ with /
-
-        let s3Folder = document.getElementById("txtS3Folder");
-        if (s3Folder.value) {
-            z = s3Folder.value + "/" + z;
-        }
-
-        // analyze the file to see if we need to upload
-        // does files exist on s3 bucket.  if so, is it outdated?
-        let doUpload = await analyzeFile(f, z, s3, bucket);
-        myConsole.log("\tdoUpload: " + doUpload);
-
-        // upload if necessary
-        if (doUpload === true) {
-            // see if we need to encrypt
-            let doEncrypt = document.getElementById("encryptCheckBox").checked;
-            myConsole.log("\tdoEncrypt: " + doEncrypt);
-
-            if (doEncrypt === true) {
-                myConsole.log("encrypting file: " + f);
-                let encryptDir = config.get("encryption.encryptionFolder");
-                myConsole.log("encryptionFolder: " + encryptDir);
-                let uploadKey = z + ".enc";
-                let encFile = encryptDir + "\\" + uploadKey;
-                encFile = encFile.replace(/\//g, '\\');
-                
-                // make sure directory exists
-                let e = encFile.substring(0, encFile.lastIndexOf("\\"));
-                mkdirp(e, function (err) {
-                    if (err) {
-                        myConsole.log("error creating directory: " + err);
-                    }
-                });
-                myConsole.log("directory created");
-
-                // now encrypt
-                let encryptor = new Encryptor();
-                myConsole.log("encrypting file: [" + f + "] to [" + encFile + "]");
-                let encKey = config.get("encryption.encryptionKey");
-                encryptor.encryptFile(f, encFile, encKey);
-
-                await delay(1000);
-                
-                // upload the encrypted file
-                myConsole.log("uploading encrypted file: " + encFile);
-                var params = {Bucket: bucket, Key: uploadKey, Body: ''};
-                var fileStream = fs.createReadStream(encFile);
-                params.Body = fileStream;
-                try {
-                    const data = await s3.upload(params).promise();
-                    consoleAppend("[ " + i + " - " + files.length + "] - uploaded [" + f + "] to [" + uploadKey + "]");
-                } catch (err) {
-                    consoleAppend("ERROR - file: " + f + " err: " + err.stack);
-                    myConsole.log("error uploading.", err);
-                }
-
-                // delete encFile
-                myConsole.log("deleting encrypted file: " + encFile);
-                fs.unlink(encFile, function (err) {
-                    if (err) {
-                        myConsole.log("error deleting file. " + err);
-                    }
-                });
-                
-            } else {
-                // do not encrypt - just upload
-                var params = {Bucket: bucket, Key: z, Body: ''};
-                var fileStream = fs.createReadStream(f);
-                params.Body = fileStream;
-                try {
-                    const data = await s3.upload(params).promise();
-                    consoleAppend("[ " + i + " - " + files.length + "] - uploaded [" + f + "] to [" + z + "]");
-                } catch (err) {
-                    consoleAppend("ERROR - file: " + f + " err: " + err.stack);
-                    myConsole.log("error uploading.", err);
-                }
-            }   
-        } else {
-            consoleAppend("[ " + i + " - " + files.length + "] - file [" + f + "] - s3 object is current");
-        }
+        // process file
+        promises.push(
+            limit( () => processFileForUpload(s3, 
+                folderName, 
+                f, 
+                bucket, 
+                document.getElementById("txtS3Folder"),
+                document.getElementById("encryptCheckBox").checked,
+                i,
+                files.length,
+                startTime )
+            )
+        );
     }
+
+    (async () => {
+        const result = await Promise.all(promises);
+    });
 }
+
+
+//
+// async function to process a file for upload to s3
+//
+async function processFileForUpload(s3, sourceFolder, sourceFile, bucket, s3Folder, encrypt, fCounter, totalFiles, startTime) {
+     // rename the upload folder to include subdirectories under uploadfolder
+     let x = String(sourceFile);
+     let z = x.substring(sourceFolder.length + 1);  // get relative path
+     z = z.replace(/\\/g, '/');      // replace any \ with /
+
+     if (s3Folder.value) {
+         z = s3Folder.value + "/" + z;
+     }
+
+     if (runStatus === false) {
+         consoleAppend("[" + fCount + " - " + totalFiles + "] - run status is false - aborting");
+         return;
+     }
+
+    if (fCounter % 5 === 0) {
+        // add a little timing
+        let currentTime = Date.now();
+        let runTime = currentTime - startTime;
+        let runTimeSec = Math.round(runTime / 1000);
+        let runTimeMin = Math.round(runTimeSec / 60);
+        let lblRunTime = document.getElementById("lblRunTime");
+        lblRunTime.textContent = runTimeMin + "min - " + runTimeSec + "sec";
+    }
+
+     // analyze the file to see if we need to upload
+     // does files exist on s3 bucket.  if so, is it outdated?
+     let doUpload = await analyzeFile(sourceFile, z, s3, bucket);
+     myConsole.log("\tdoUpload: " + doUpload);
+
+     if (doUpload === true) {
+         // see if we need to encrypt
+         let doEncrypt = encrypt;
+         myConsole.log("\tdoEncrypt: " + doEncrypt);
+
+         if (doEncrypt === true) {
+             myConsole.log("encrypting file: " + sourceFile);
+             let encryptDir = config.get("encryption.encryptionFolder");
+             myConsole.log("encryptionFolder: " + encryptDir);
+             let uploadKey = z + ".enc";
+             let encFile = encryptDir + "\\" + uploadKey;
+             encFile = encFile.replace(/\//g, '\\');
+             
+             // make sure directory exists
+             let e = encFile.substring(0, encFile.lastIndexOf("\\"));
+             mkdirp(e, function (err) {
+                 if (err) {
+                     myConsole.log("error creating directory: " + err);
+                 }
+             });
+             myConsole.log("directory created");
+
+             // now encrypt
+             let encryptor = new Encryptor();
+             myConsole.log("encrypting file: [" + sourceFile + "] to [" + encFile + "]");
+             let encKey = config.get("encryption.encryptionKey");
+             encryptor.encryptFile(f, encFile, encKey);
+
+             await delay(1000);
+             
+             // upload the encrypted file
+             myConsole.log("uploading encrypted file: " + encFile);
+             var params = {Bucket: bucket, Key: uploadKey, Body: ''};
+             var fileStream = fs.createReadStream(encFile);
+             params.Body = fileStream;
+             try {
+                 const data = await s3.upload(params).promise();
+                 consoleAppend("[" + fCounter + " - " + totalFiles + "] - uploaded [" + sourceFile + "] to [" + uploadKey + "]");
+             } catch (err) {
+                 consoleAppend("ERROR - file: " + sourceFile + " err: " + err.stack);
+                 myConsole.log("error uploading.", err);
+             }
+
+             // delete encFile
+             myConsole.log("deleting encrypted file: " + encFile);
+             fs.unlink(encFile, function (err) {
+                 if (err) {
+                     consoleAppend("error deleting the encFile : " + err);
+                 }
+             });
+         } else {
+             // do not encrypt - just upload
+             var params = {Bucket: bucket, Key: z, Body: ''};
+             var fileStream = fs.createReadStream(sourceFile);
+             params.Body = fileStream;
+             try {
+                 const data = await s3.upload(params).promise();
+                 consoleAppend("[" + fCounter + " - " + totalFiles + "] - uploaded [" + sourceFile + "] to [" + z + "]");
+             } catch (err) {
+                 consoleAppend("ERROR - file: " + sourceFile + " err: " + err.stack);
+             }
+         }   
+     } else {
+         consoleAppend("[" + fCounter + " - " + totalFiles + "] - file [" + sourceFile + "] - s3 object is current");
+     }
+}
+
+
+async function processFileForDownload(s3, localDir, bucket, key, counter, startTime) {
+    if (runStatus === false) {
+        return;
+    }
+
+    // add a little timing
+    let currentTime = Date.now();
+    let runTime = currentTime - startTime;
+    let runTimeSec = Math.round(runTime / 1000);
+    let runTimeMin = Math.round(runTimeSec / 60);
+    let lblRunTime = document.getElementById("lblRunTime");
+    lblRunTime.textContent = runTimeMin + "min - " + runTimeSec + "sec";
+
+    // setup the directory for download
+    let writeDir = localDir + "/" + key.substring(0, key.lastIndexOf("/"));
+    let writeFile = key.substring(key.lastIndexOf("/") + 1);
+    writeDir = writeDir.replace(/\//g, '\\');
+    let fullPath = writeDir + "\\" + writeFile;
+    consoleAppend(counter + " - downloading object: " + key + " to local file: " + fullPath);
+
+    // make sure target directory exists on local folder
+    mkdirp(writeDir, function (err) {
+        if (err) {
+            myConsole.log(err);
+        }
+    });
+
+    // download the object
+    try {
+        await downloadObject(s3, bucket, key, fullPath);
+    } catch (err) {
+        myConsole.log("error downloading file: " + err);
+    }
+    
+    // give a 1/2 second for the file write to settle (not sure if we need this)
+    const sleep = await delay(500);
+
+    // if encrypted - decrypt file
+    // file.enc - length = 8 - pos = 4
+    if (key.substring(key.length - 4) === ".enc") {
+        myConsole.log("file is encrypted. decrypting now");
+        let encryptor = new Encryptor();
+        let decryptedFile = fullPath.substring(0, fullPath.length - 4);
+     
+        encryptor.decryptFile(fullPath, 
+            decryptedFile, 
+            config.get("encryption.encryptionKey"));
+        
+        consoleAppend("decrypted file: [" + decryptedFile + "]");
+    }
+
+    // maybe we want to delete the encrypted version?
+}
+
 
 
 //
 // download all files in a given bucket and s3 folder
 //
-const downloadFilesFromS3 = async function (bucket, folderName, localDir) {
+async function downloadFilesFromS3 (bucket, folderName, localDir) {
+    var startTime = Date.now();
     let s3 = awsConnect();
 
     var params = {
@@ -400,57 +517,32 @@ const downloadFilesFromS3 = async function (bucket, folderName, localDir) {
     let data = await s3.listObjectsV2(params).promise();
         
     consoleAppend("objects found: " + data.Contents.length);
+    let promises = [];
+    const limit = pLimit(config.get("config.numThreads"));
+
     var j = 0;
     for (let o of data.Contents) {
-        if (runStatus === false) {
-            consoleAppend("job stopped...");
-            break;
-        }
-
         j++;
-        consoleAppend(j + " - object: " + o.Key);
-        let writeDir = localDir + "/" + o.Key.substring(0, o.Key.lastIndexOf("/"));
-        let writeFile = o.Key.substring(o.Key.lastIndexOf("/") + 1);
-        writeDir = writeDir.replace(/\//g, '\\');
-        let fullPath = writeDir + "\\" + writeFile;
-        myConsole.log("saving object to: " + fullPath);
+        const counter = j;
 
-        mkdirp(writeDir, function (err) {
-            if (err) {
-                myConsole.log(err);
-            }
-        });
+        promises.push(
+            limit(() => processFileForDownload(s3,
+                localDir,
+                bucket,
+                o.Key,
+                counter,
+                startTime)
+            )
+        );
+    }
 
-        // download the object
-        try {
-            await downloadObject(s3, bucket, o.Key, fullPath);
-        } catch (err) {
-            myConsole.log("error downloading file: " + err);
-        }
-        
-
-        const sleep = await delay(1500);
-
-        // if encrypted - decrypt file
-        // file.enc - length = 8 - pos = 4
-        if (o.Key.substring(o.Key.length - 4) === ".enc") {
-            myConsole.log("file is encrypted. decrypting now");
-            let encryptor = new Encryptor();
-            let decryptedFile = fullPath.substring(0, fullPath.length - 4);
-         
-            encryptor.decryptFile(fullPath, 
-                decryptedFile, 
-                config.get("encryption.encryptionKey"));
-            
-            consoleAppend("decrypted file: [" + decryptedFile + "]");
-        }
-    };
+    const result = await Promise.all(promises);
 }
 
 //
 // download a single object from s3
 //
-const downloadObject = async function (s3, bucket, k, writeFile) {
+async function downloadObject(s3, bucket, k, writeFile) {
     return new Promise((resolve, reject) => {
         let params = { Bucket: bucket, Key: k };
         let writeStream = fs.createWriteStream(writeFile);
@@ -478,10 +570,9 @@ function getCipherKey(password) {
 // analyze the file and see if we need to upload
 //
 async function analyzeFile(f, targetObject, s3, bucket) {
-    // default action
     let doUpload = true;
 
-    // checks - status values
+    
     let objectExists = false;
     let s3Outdated = false;
 
@@ -494,9 +585,8 @@ async function analyzeFile(f, targetObject, s3, bucket) {
     };
 
     let s3LastModified = null;
-    let data = null;
     try {
-        data = await s3.headObject(params).promise();
+        const data = await s3.headObject(params).promise();
     } catch (err) {
         if (err.code === 'NotFound') {
             return doUpload;
@@ -524,7 +614,6 @@ async function analyzeFile(f, targetObject, s3, bucket) {
         myConsole.log("error getting local file mtime.");
     }
     
-
     // if all of our tests passed, then do not upload
     if (objectExists === true && s3Outdated === false) {
         doUpload = false;
@@ -532,7 +621,8 @@ async function analyzeFile(f, targetObject, s3, bucket) {
         myConsole.log("tests failed - uploading file");
     }
 
-    return doUpload;
+    return(doUpload);
+    
 }
 
 //
@@ -560,3 +650,13 @@ const getAllFiles = function(dirPath, arrayOfFiles) {
   
     return arrayOfFiles
 }
+
+process.on('unhandledRejection', (err) => {
+    myConsole.log("error: " + err);
+    process.exit(1);
+});
+
+process.on('uncaughtException', (err) => {
+    myConsole.log("error: " + err);
+    process.exit(1);
+})

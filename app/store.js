@@ -23,8 +23,12 @@ class Store {
   
   // ...and this will set it
   set(key, val) {
-    const myArr = key.split(".");
-    this.data[myArr[0]][myArr[1]] = val;
+    const a = key.split(".");
+    myConsole.log("setting value: " + key + " to " + val);
+    if (!this.data[a[0]]) {
+      this.data[a[0]] = {};
+    }
+    this.data[a[0]][a[1]] = val;
     fs.writeFileSync(this.path, JSON.stringify(this.data));
   }
 }
@@ -34,7 +38,6 @@ function parseDataFile(filePath, defaults) {
   // `fs.readFileSync` will return a JSON string which we then parse into a Javascript object
   try {
     return JSON.parse(fs.readFileSync(filePath));
-    
   } catch(error) {
     // if there was some kind of error, return the passed in defaults instead.
     return defaults;

@@ -24,6 +24,9 @@ const config = new Store({
         "encryption": {
             "encryptionKey": "testkey",
             "encryptionFolder": "folder"
+        },
+        "config": {
+            "numThreads": "3"
         }
     }
   });
@@ -38,6 +41,8 @@ try {
     accessKey.value = config.get("s3.accessKey");
     var secretAccessKey = document.getElementById("txtSecretAccessKey");
     secretAccessKey.value = config.get('s3.secretAccessKey');
+    var numThreads = document.getElementById("txtNumThreads");
+    numThreads.value = config.get("config.numThreads");
 } catch (err) {
     myConsole.log(err);
 }
@@ -51,8 +56,9 @@ function saveS3Connection() {
     config.set("s3.accessKey", accessKey);
     let secretAccessKey = document.getElementById("txtSecretAccessKey").value;
     config.set("s3.secretAccessKey", secretAccessKey);
+    let numThreads = document.getElementById("txtNumThreads").value;
+    config.set("config.numThreads", numThreads);
     alert("values set.");
-
 }
 
 function cancel() {

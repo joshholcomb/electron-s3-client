@@ -12,7 +12,7 @@ function createWindow () {
   // Create the browser window.
   win = new BrowserWindow({ 
     width: 1150, 
-    height: 800, 
+    height: 850, 
     webPreferences: {
       nodeIntegration: true,
       enableRemoteModule: true,
@@ -35,6 +35,9 @@ function createWindow () {
     win = null
   })
 
+  // open devtools
+  //win.webContents.openDevTools();
+
 
   //
   // setup a custom menu
@@ -50,9 +53,9 @@ function createWindow () {
           }
         },
         {
-          label: 's3 connection',
+          label: 'config settings',
           click() {
-            win.loadFile('app/s3-connection.html');
+            win.loadFile('app/config-settings.html');
           }
         },
 				{

@@ -24,7 +24,7 @@
 
         <div class="text-center">
         <h1 id="proj">electron-s3-client</h1>
-        <h2>s3 connection properties</h2>
+        <h2>config settings</h2>
         </div>
     </div>
 
@@ -56,6 +56,13 @@
 
         <div class="row row-relative">
             <div class="col-md-4 small">
+              <label for="txtNumThreads">num threads:</label>
+              <input id="txtNumThreads" type="text" class="input-sm w-50"/>
+            </div>
+        </div>
+
+        <div class="row row-relative">
+            <div class="col-md-4 small">
                 <button type="submit" class="btn-primary btn-sm" onclick=saveS3Connection()>save</button>
             </div>
         </div>
@@ -67,7 +74,7 @@
         </div>
 
      <!-- include backing js file -->
-     <script src="s3-connection.js"></script>
+     <script src="config-settings.js"></script>
 
      <!-- include the js files for bootstrap -->
      <script src="renderer.js"></script>

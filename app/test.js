@@ -1,19 +1,18 @@
-const Store = require('./store');
 
-const config = new Store({
-    configName: 'default',
-    defaults: {
-        "s3": {
-            "accessKey": "josh",
-            "secretAccessKey": "test",
-            "endpoint": "myendpoint"
-        },
-        "encryption": {
-            "encryptionKey": "testkey",
-            "encryptionFolder": "folder"
-        }
-    }
-  });
 
-  console.log("config loaded.")
-  console.log("s3 endpoint: " + config.get("s3.endpoint"));
+
+let obj = {};
+obj.v = "test";
+
+let b = ["config", "testProperty"];
+let a = [];
+
+if (!a[obj]) {
+    let o = {};
+    let o2 = {};
+    o2[b[1]] = "3";
+    o[b[0]] = o2;
+    a.push(o);
+}
+
+console.log(a);
