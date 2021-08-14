@@ -107,14 +107,12 @@ function lsObjectsButton() {
 function backupButton() {
     runStatus = true;
 
-    myConsole.log("backup initiated...");
     var dirField = document.getElementById("txtLocalFolder");
     if (dirField.value.length == 0) {
         alert("local directory not selected..");
         return;
     }
     var dir = dirField.value;
-    myConsole.log("directory selected: " + dir);
 
     var bucket = document.getElementById("txtBucket");
     if (bucket.value.length == 0) {
@@ -154,28 +152,24 @@ function clearConsoleButton() {
 function restoreButton() {
     runStatus = true;
 
-    myConsole.log("restore initiated...");
     var dirField = document.getElementById("txtLocalFolder");
     if (dirField.value.length == 0) {
         alert("local directory not selected..");
         return;
     }
     var dir = dirField.value;
-    myConsole.log("directory selected: " + dir);
 
     var bucket = document.getElementById("txtBucket");
     if (bucket.value.length == 0) {
         alert("bucket not entered...");
         return;
     }
-    myConsole.log("bucket entered: [" + bucket.value + "]");
 
     var s3Folder = document.getElementById("txtS3Folder");
     if (!s3Folder.value) {
         alert("s3 folder not entered...");
         return;
     }
-    myConsole.log("s3 folder entered: [" + s3Folder.value + "]");
 
     // got all input data - call restore function
     downloadFilesFromS3(bucket.value, s3Folder.value, dir);
@@ -307,12 +301,12 @@ function uploadFilesToS3(bucket, folderName) {
 
     let s3 = awsConnect();
 
-    myConsole.log("traversing directory [" + folderName + "]");
     const files = getAllFiles(folderName);
     consoleAppend("files found: [" + files.length + "]");
     
     let promises = [];
-    const limit = pLimit(config.get("config.numThreads"));
+    let numThreads = config.get("config.numThreads");
+    const limit = pLimit(numThreads);
 
     var fCount = 0;
     for (const f of files) {
@@ -405,7 +399,7 @@ async function processFileForUpload(s3, sourceFolder, sourceFile, bucket, s3Fold
              let encryptor = new Encryptor();
              myConsole.log("encrypting file: [" + sourceFile + "] to [" + encFile + "]");
              let encKey = config.get("encryption.passphrase");
-             encryptor.encryptFile(f, encFile, encKey);
+             encryptor.encryptFile(sourceFile, encFile, encKey);
 
              await delay(1000);
              
@@ -482,7 +476,7 @@ async function processFileForDownload(s3, localDir, bucket, key, counter, startT
     }
     
     // give a 1/2 second for the file write to settle (not sure if we need this)
-    const sleep = await delay(500);
+    const sleep = await delay(1500);
 
     // if encrypted - decrypt file
     // file.enc - length = 8 - pos = 4
@@ -496,9 +490,17 @@ async function processFileForDownload(s3, localDir, bucket, key, counter, startT
             config.get("encryption.passphrase"));
         
         consoleAppend("decrypted file: [" + decryptedFile + "]");
-    }
 
-    // maybe we want to delete the encrypted version?
+        await delay(1500);
+        myConsole.log("deleting encrypted file: " + fullPath);
+        fs.unlink(fullPath, function (err) {
+            if (err) {
+                consoleAppend("error deleting the encFile : " + err);
+            } else {
+                consoleAppend("deleted encrypted file: " + fullPath);
+            }
+        });
+    }
 }
 
 
@@ -515,7 +517,6 @@ async function downloadFilesFromS3 (bucket, folderName, localDir) {
         Prefix: folderName
     };
 
-    myConsole.log("bucket: " + bucket + " - folder: " + folderName);
     let data = await s3.listObjectsV2(params).promise();
         
     consoleAppend("objects found: " + data.Contents.length);
@@ -528,7 +529,7 @@ async function downloadFilesFromS3 (bucket, folderName, localDir) {
         if (runStatus === false) {
             break;
         }
-        
+
         j++;
         const counter = j;
 
@@ -597,6 +598,9 @@ async function analyzeFile(f, targetObject, s3, bucket) {
     } catch (err) {
         if (err.code === 'NotFound') {
             return doUpload;
+        } else {
+            consoleAppend("error analyzing file. " + err);
+            return false;
         }
     }
 
