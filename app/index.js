@@ -35,8 +35,8 @@ const config = new Store({
             "endpoint": "myendpoint"
         },
         "encryption": {
-            "encryptionKey": "testkey",
-            "encryptionFolder": "folder"
+            "passphrase": "testkey",
+            "tmpDir": "folder"
         },
         "config": {
             "numThreads": "3"
@@ -58,6 +58,8 @@ for (i=0; i < length; i++) {
     pass += "*";
 }
 lblSecretAccessKey.textContent = pass;
+let defaultBucket = document.getElementById("txtBucket");
+defaultBucket.value = config.get("s3.defaultBucket");
 
 // update folder information
 // fires from html when local directory value changes
@@ -384,7 +386,7 @@ async function processFileForUpload(s3, sourceFolder, sourceFile, bucket, s3Fold
 
          if (doEncrypt === true) {
              myConsole.log("encrypting file: " + sourceFile);
-             let encryptDir = config.get("encryption.encryptionFolder");
+             let encryptDir = config.get("encryption.tmpDir");
              myConsole.log("encryptionFolder: " + encryptDir);
              let uploadKey = z + ".enc";
              let encFile = encryptDir + "\\" + uploadKey;
@@ -402,7 +404,7 @@ async function processFileForUpload(s3, sourceFolder, sourceFile, bucket, s3Fold
              // now encrypt
              let encryptor = new Encryptor();
              myConsole.log("encrypting file: [" + sourceFile + "] to [" + encFile + "]");
-             let encKey = config.get("encryption.encryptionKey");
+             let encKey = config.get("encryption.passphrase");
              encryptor.encryptFile(f, encFile, encKey);
 
              await delay(1000);
@@ -491,7 +493,7 @@ async function processFileForDownload(s3, localDir, bucket, key, counter, startT
      
         encryptor.decryptFile(fullPath, 
             decryptedFile, 
-            config.get("encryption.encryptionKey"));
+            config.get("encryption.passphrase"));
         
         consoleAppend("decrypted file: [" + decryptedFile + "]");
     }
@@ -522,6 +524,11 @@ async function downloadFilesFromS3 (bucket, folderName, localDir) {
 
     var j = 0;
     for (let o of data.Contents) {
+
+        if (runStatus === false) {
+            break;
+        }
+        
         j++;
         const counter = j;
 

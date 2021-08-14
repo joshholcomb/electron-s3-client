@@ -34,6 +34,18 @@
             <hr/>
           </div>
         </div>
+
+        <div class="row row-relative">
+            <div class="col-sm-4">
+                <hr/>
+            </div>
+            <div class="col-sm-4">
+                <p><div align="center"><b>s3 settings</b></div></p>
+            </div>
+            <div class="col-sm-4">
+                <hr/>
+            </div>
+        </div>
         
         <div class="row row-relative">
             <div class="col-md-4 small">
@@ -53,6 +65,24 @@
                 <input type="password" class="input-sm" id="txtSecretAccessKey"/>
             </div>
         </div>
+        <div class="row row-relative">
+            <div class="col-md-4 small">
+                <label for="txtDefaultBucket">aws default bucket:</label>
+                <input type="text" class="input-sm" id="txtDefaultBucket"/>
+            </div>
+        </div>
+
+        <div class="row row-relative">
+            <div class="col-sm-4">
+                <hr/>
+            </div>
+            <div class="col-sm-4">
+                <p><div align="center"><b>thread settings</b></div></p>
+            </div>
+            <div class="col-sm-4">
+                <hr/>
+            </div>
+        </div>
 
         <div class="row row-relative">
             <div class="col-md-4 small">
@@ -62,8 +92,34 @@
         </div>
 
         <div class="row row-relative">
+            <div class="col-sm-4">
+                <hr/>
+            </div>
+            <div class="col-sm-4">
+                <p><div align="center"><b>encryption settings</b></div></p>
+            </div>
+            <div class="col-sm-4">
+                <hr/>
+            </div>
+        </div>
+
+        <div class="row row-relative">
             <div class="col-md-4 small">
-                <button type="submit" class="btn-primary btn-sm" onclick=saveS3Connection()>save</button>
+              <label for="txtTmpEncDir">Temp Encryption Directory:</label>
+              <input id="txtTmpEncDir" type="text" class="input-sm w-50"/>
+            </div>
+        </div>
+
+        <div class="row row-relative">
+            <div class="col-md-4 small">
+              <label for="txtEncPass">encryption passphrase:</label>
+              <input id="txtEncPass" type="password" class="input-sm w-50"/>
+            </div>
+        </div>
+
+        <div class="row row-relative">
+            <div class="col-md-4 small">
+                <button type="submit" class="btn-primary btn-sm" onclick=saveConfigSettings()>save</button>
             </div>
         </div>
 
