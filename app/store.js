@@ -1,6 +1,5 @@
 const path = require('path');
 const fs = require('fs');
-var myConsole = new nodeConsole.Console(process.stdout, process.stderr); // for console logging
 
 class Store {
   constructor(opts) {
@@ -16,7 +15,7 @@ class Store {
   // This will just return the property on the `data` object
   get(key) {
     // my json is 2 deep
-    myConsole.log("getting key: " + key);
+    console.log("getting key: " + key);
     const myArr = key.split(".");
     return this.data[myArr[0]][myArr[1]];
   }
@@ -24,7 +23,7 @@ class Store {
   // ...and this will set it
   set(key, val) {
     const a = key.split(".");
-    myConsole.log("setting value: " + key + " to " + val);
+    console.log("setting value: " + key + " to " + val);
     if (!this.data[a[0]]) {
       this.data[a[0]] = {};
     }

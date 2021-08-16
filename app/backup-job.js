@@ -1,9 +1,10 @@
 
-var myConsole = new nodeConsole.Console(process.stdout, process.stderr); // for console logging
 const path = require("path");                   
 const fs = require('fs');                     // for filesystem work
 const AWS = require('aws-sdk');
 const Encryptor = require('./file-encrypt');    // file encryption
+const pLimit = require('p-limit');
+
 
 /*
 * class: BackupJob
@@ -17,19 +18,67 @@ class BackupJob {
     s3;                 // s3 connection object
     dayOfWeek = 0;      // schedule - what day of week to run job
     hourOfDay = 0;      // schedule - what hour of day to run job
+    config;             // configuration from config file
+    certFile;
 
-    constructor(s3, localFolder, s3Bucket, s3Folder) {
-        this.s3 = s3;
+    // private variables
+    s3;
+
+    constructor(localFolder, s3Bucket, s3Folder, config, certFile) {
         this.localFolder = localFolder;
         this.s3Bucket = s3Bucket;
         this.s3Folder = s3Folder;
+        this.config = config;
+        this.certFile = certFile;
+    }
+
+    connectToS3() {
+        try {
+            fileContents = fs.readFileSync(certFile);
+        } catch (err) {
+            console.log(err.stack);
+        }
+    
+        var customAgent = new https.Agent({ca: fileContents});
+        try {
+            AWS.config.update({
+                httpOptions: { agent: customAgent}
+            });
+        } catch (err) {
+            console.log(err.stack);
+        }
+    
+        // get access creds from config
+        var accessKey = config.get("s3.accessKey");
+        var secretAccessKey = config.get("s3.secretAccessKey");
+        var endpoint = config.get("s3.endpoint");
+    
+        // set AWS timeout
+        AWS.config.update({
+            maxRetries: 2,
+            httpOptions: {
+                timeout: 240000,
+                connectTimeout: 5000,
+            },
+        })
+    
+        var s3  = new AWS.S3({
+                accessKeyId: accessKey,
+                secretAccessKey: secretAccessKey,
+                endpoint: endpoint,
+                s3ForcePathStyle: true, // needed with minio?
+                signatureVersion: 'v4'
+        });
+        console.log("connected...");
+    
+        this.s3 = s3;
     }
 
     // TODO: implement
-    doBackup(s3, localFolder, s3Bucket, s3Folder) {
+    backupFolderToS3(s3, localFolder, s3Bucket, s3Folder) {
         myConsole.log("traversing directory [" + folderName + "]");
-        const files = this.getAllFiles(folderName);
-        consoleAppend("files found: [" + files.length + "]");
+        const files = this.listLocalFiles(folderName);
+        console.log("files found: [" + files.length + "]");
         
         var i = 0;
         for (const f of files) {
@@ -50,7 +99,7 @@ class BackupJob {
         this.hourOfDay = hourOfDay;
     }
 
-    getAllFiles(dirPath, arrayOfFiles) {
+    listLocalFiles(dirPath, arrayOfFiles) {
         let files = [];
 
         try {

@@ -4,8 +4,6 @@
 // global variables
 //
 const { data } = require('jquery');
-var nodeConsole = require('console');           // for access to console
-var myConsole = new nodeConsole.Console(process.stdout, process.stderr); // for console logging
 const path = require("path");                   
 const fs = require('fs');                     // for filesystem work
 var mkdirp = require('mkdirp');
@@ -14,6 +12,8 @@ const Store = require('./store');
 const app = require('electron');
 const remote = require('electron').remote;
 const dialog = remote.dialog;
+var AWS = require('aws-sdk');
+var https = require('https');
 
 let runStatus = true;
 
@@ -46,7 +46,7 @@ const config = new Store({
 
 
 // initial display settings
-myConsole.log("displaying s3 values.");
+console.log("displaying s3 values.");
 let lblEndpoint = document.getElementById("lblS3Endpoint");
 lblEndpoint.textContent = config.get("s3.endpoint");
 let lblAccessKey = document.getElementById("lblS3AccessKey");
@@ -64,18 +64,18 @@ defaultBucket.value = config.get("s3.defaultBucket");
 // update folder information
 // fires from html when local directory value changes
 const updateFolder = async () => {
-    myConsole.log("selecting directory.");
+    console.log("selecting directory.");
     var lf = document.getElementById("txtLocalFolder");
 
     try {
         const chosenFolders = await dialog.showOpenDialog({ properties: ['openDirectory']}); 
         if (chosenFolders  && chosenFolders.canceled === false) {
-            myConsole.log("selected directory: " + chosenFolders.filePaths[0]);
+            console.log("selected directory: " + chosenFolders.filePaths[0]);
             lf.value = chosenFolders.filePaths[0];
             consoleAppend("selected local folder: [" + chosenFolders.filePaths[0] + "]");
         }
     } catch (err) {
-        myConsole.log("error choosing file: " + err);
+        console.log("error choosing file: " + err);
     }
     
 }
@@ -92,7 +92,7 @@ function lsBucketsButton() {
 //
 function lsObjectsButton() {
     var bucket = document.getElementById("txtBucket");
-    myConsole.log("bucket entered: [" + bucket.value + "]");
+    console.log("bucket entered: [" + bucket.value + "]");
     if (bucket.value.length == 0) {
         alert("bucket not entered.");
         return;
@@ -119,7 +119,7 @@ function backupButton() {
         alert("bucket not entered...");
         return;
     }
-    myConsole.log("bucket entered: [" + bucket.value + "]");
+    console.log("bucket entered: [" + bucket.value + "]");
     if (bucket.value.length == 0) {
         alert("bucket or src folder not entered.");
         return;
@@ -132,7 +132,7 @@ function backupButton() {
 // invoked when user clicks the stop button
 //
 function stopButton() {
-    myConsole.log("setting runStatus = false");
+    console.log("setting runStatus = false");
     runStatus = false;
     consoleAppend("job stop msg sent");
 }
@@ -141,7 +141,7 @@ function stopButton() {
 // invoked when user clicks the clear console button
 //
 function clearConsoleButton() {
-    myConsole.log("clearing console...");
+    console.log("clearing console...");
     var ta = document.getElementById("txtConsole");
     ta.value = "";
 }
@@ -197,14 +197,11 @@ function consoleAppend(msg) {
 // establish a connection to aws
 //
 function awsConnect() {
-    var AWS = require('aws-sdk');
-
-    var https = require('https');
-    const fs = require('fs');
+    
     try {
         fileContents = fs.readFileSync('config/my-ca-cert.crt');
     } catch (err) {
-        myConsole.log(err.stack);
+        console.log(err.stack);
     }
 
     var customAgent = new https.Agent({ ca: fileContents});
@@ -213,10 +210,10 @@ function awsConnect() {
             httpOptions: { agent: customAgent}
         });
     } catch (err) {
-        myConsole.log(err.stack);
+        console.log(err.stack);
     }
 
-    // get access creds from ui boxes
+    // get access creds from config
     var accessKey = config.get("s3.accessKey");
     var secretAccessKey = config.get("s3.secretAccessKey");
     var endpoint = config.get("s3.endpoint");
@@ -237,7 +234,7 @@ function awsConnect() {
             s3ForcePathStyle: true, // needed with minio?
             signatureVersion: 'v4'
     });
-    myConsole.log("connected...");
+    console.log("connected...");
 
     return s3;
 }
@@ -252,7 +249,7 @@ function listBuckets() {
     var params = {};
     s3.listBuckets(params, function(err, data) {
       if (err) {
-          myConsole.log(err, err.stack); // an error occurred
+          console.log(err, err.stack); // an error occurred
       } else {
         data.Buckets.forEach(function(i) {
             consoleAppend("bucket: " + i.Name);
@@ -274,10 +271,10 @@ function listBucketFolders(bucket) {
         Delimiter: "/"
     };
 
-    myConsole.log("listing bucket contents for bucket: " + bucket);
+    console.log("listing bucket contents for bucket: " + bucket);
     s3.listObjects(params, function(err, data) {
         if (err) {
-            myConsole.log(err, err.stack);
+            console.log(err, err.stack);
         } else {
             consoleAppend("folders found: " + data.CommonPrefixes.length);
             var j = 0;
@@ -314,7 +311,7 @@ function uploadFilesToS3(bucket, folderName) {
         const i = fCount;
 
         if (!runStatus) {
-            myConsole.log("run status is false.");
+            console.log("run status is false.");
             consoleAppend("job stopped...");
             break;
         }
@@ -371,17 +368,17 @@ async function processFileForUpload(s3, sourceFolder, sourceFile, bucket, s3Fold
      // analyze the file to see if we need to upload
      // does files exist on s3 bucket.  if so, is it outdated?
      let doUpload = await analyzeFile(sourceFile, z, s3, bucket);
-     myConsole.log("\tdoUpload: " + doUpload);
+     console.log("\tdoUpload: " + doUpload);
 
      if (doUpload === true) {
          // see if we need to encrypt
          let doEncrypt = encrypt;
-         myConsole.log("\tdoEncrypt: " + doEncrypt);
+         console.log("\tdoEncrypt: " + doEncrypt);
 
          if (doEncrypt === true) {
-             myConsole.log("encrypting file: " + sourceFile);
+             console.log("encrypting file: " + sourceFile);
              let encryptDir = config.get("encryption.tmpDir");
-             myConsole.log("encryptionFolder: " + encryptDir);
+             console.log("encryptionFolder: " + encryptDir);
              let uploadKey = z + ".enc";
              let encFile = encryptDir + "\\" + uploadKey;
              encFile = encFile.replace(/\//g, '\\');
@@ -390,21 +387,21 @@ async function processFileForUpload(s3, sourceFolder, sourceFile, bucket, s3Fold
              let e = encFile.substring(0, encFile.lastIndexOf("\\"));
              mkdirp(e, function (err) {
                  if (err) {
-                     myConsole.log("error creating directory: " + err);
+                     console.log("error creating directory: " + err);
                  }
              });
-             myConsole.log("directory created");
+             console.log("directory created");
 
              // now encrypt
              let encryptor = new Encryptor();
-             myConsole.log("encrypting file: [" + sourceFile + "] to [" + encFile + "]");
+             console.log("encrypting file: [" + sourceFile + "] to [" + encFile + "]");
              let encKey = config.get("encryption.passphrase");
              encryptor.encryptFile(sourceFile, encFile, encKey);
 
              await delay(1000);
              
              // upload the encrypted file
-             myConsole.log("uploading encrypted file: " + encFile);
+             console.log("uploading encrypted file: " + encFile);
              var params = {Bucket: bucket, Key: uploadKey, Body: ''};
              var fileStream = fs.createReadStream(encFile);
              params.Body = fileStream;
@@ -413,11 +410,11 @@ async function processFileForUpload(s3, sourceFolder, sourceFile, bucket, s3Fold
                  consoleAppend("[" + fCounter + " - " + totalFiles + "] - uploaded [" + sourceFile + "] to [" + uploadKey + "]");
              } catch (err) {
                  consoleAppend("ERROR - file: " + sourceFile + " err: " + err.stack);
-                 myConsole.log("error uploading.", err);
+                 console.log("error uploading.", err);
              }
 
              // delete encFile
-             myConsole.log("deleting encrypted file: " + encFile);
+             console.log("deleting encrypted file: " + encFile);
              fs.unlink(encFile, function (err) {
                  if (err) {
                      consoleAppend("error deleting the encFile : " + err);
@@ -464,7 +461,7 @@ async function processFileForDownload(s3, localDir, bucket, key, counter, startT
     // make sure target directory exists on local folder
     mkdirp(writeDir, function (err) {
         if (err) {
-            myConsole.log(err);
+            console.log(err);
         }
     });
 
@@ -472,7 +469,7 @@ async function processFileForDownload(s3, localDir, bucket, key, counter, startT
     try {
         await downloadObject(s3, bucket, key, fullPath);
     } catch (err) {
-        myConsole.log("error downloading file: " + err);
+        console.log("error downloading file: " + err);
     }
     
     // give a 1/2 second for the file write to settle (not sure if we need this)
@@ -481,7 +478,7 @@ async function processFileForDownload(s3, localDir, bucket, key, counter, startT
     // if encrypted - decrypt file
     // file.enc - length = 8 - pos = 4
     if (key.substring(key.length - 4) === ".enc") {
-        myConsole.log("file is encrypted. decrypting now");
+        console.log("file is encrypted. decrypting now");
         let encryptor = new Encryptor();
         let decryptedFile = fullPath.substring(0, fullPath.length - 4);
      
@@ -492,7 +489,7 @@ async function processFileForDownload(s3, localDir, bucket, key, counter, startT
         consoleAppend("decrypted file: [" + decryptedFile + "]");
 
         await delay(1500);
-        myConsole.log("deleting encrypted file: " + fullPath);
+        console.log("deleting encrypted file: " + fullPath);
         fs.unlink(fullPath, function (err) {
             if (err) {
                 consoleAppend("error deleting the encFile : " + err);
@@ -584,7 +581,7 @@ async function analyzeFile(f, targetObject, s3, bucket) {
     let objectExists = false;
     let s3Outdated = false;
 
-    myConsole.log("analyzing file: " + f);
+    console.log("analyzing file: " + f);
 
     // see if object exists in s3
     var params = {
@@ -617,19 +614,19 @@ async function analyzeFile(f, targetObject, s3, bucket) {
         let s3Date = new Date(s3LastModified);
         if (localDate > s3Date) {
             s3Outdated = true;
-            myConsole.log("\ts3 file is outdated");
+            console.log("\ts3 file is outdated");
         } else {
-            myConsole.log("\ts3 file is current");
+            console.log("\ts3 file is current");
         }
     } catch (error) {
-        myConsole.log("error getting local file mtime.");
+        console.log("error getting local file mtime.");
     }
     
     // if all of our tests passed, then do not upload
     if (objectExists === true && s3Outdated === false) {
         doUpload = false;
     } else {
-        myConsole.log("tests failed - uploading file");
+        console.log("tests failed - uploading file");
     }
 
     return(doUpload);
@@ -645,7 +642,7 @@ const getAllFiles = function(dirPath, arrayOfFiles) {
     try {
         files = fs.readdirSync(dirPath);
     } catch (err) {
-        myConsole.log(err.stack);
+        console.log(err.stack);
     }
   
     arrayOfFiles = arrayOfFiles || []
@@ -663,11 +660,11 @@ const getAllFiles = function(dirPath, arrayOfFiles) {
 }
 
 process.on('unhandledRejection', (err) => {
-    myConsole.log("error: " + err);
+    console.log("error: " + err);
     process.exit(1);
 });
 
 process.on('uncaughtException', (err) => {
-    myConsole.log("error: " + err);
+    console.log("error: " + err);
     process.exit(1);
 })

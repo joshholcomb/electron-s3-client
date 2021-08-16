@@ -5,8 +5,6 @@
 // global variables
 //
 const { data } = require('jquery');
-var nodeConsole = require('console');           // for access to console
-var myConsole = new nodeConsole.Console(process.stdout, process.stderr); // for console logging
 const path = require("path");                   
 const fs = require('fs');                     // for filesystem work
 const Store = require('./store');
@@ -54,12 +52,12 @@ try {
     var encPass = document.getElementById("txtEncPass");
     encPass.value = config.get("encryption.passphrase");
 } catch (err) {
-    myConsole.log(err);
+    console.log(err);
 }
 
 
 function saveConfigSettings() {
-    myConsole.log("saving s3 properties");
+    console.log("saving s3 properties");
     let endpoint = document.getElementById("txtEndpoint").value;
     config.set("s3.endpoint", endpoint);
     let accessKey = document.getElementById("txtAccessKey").value;
