@@ -11,7 +11,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 class Encryptor {
 
-    encryptFile(inFile, outFile, password) {
+    async encryptFile(inFile, outFile, password) {
         let initVect = crypto.randomBytes(16);
         let k = this.getCipherKey(password);
         let readStream = fs.createReadStream(inFile);
@@ -29,7 +29,7 @@ class Encryptor {
     }
 
     async decryptFile(inFile, outFile, password) {
-        myConsole.log("reading encFile: [" + inFile + "]");
+        console.log("reading encFile: [" + inFile + "]");
 
         var readIv = 
             fs.createReadStream(inFile, { end: 15 });

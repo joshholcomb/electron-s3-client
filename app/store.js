@@ -15,7 +15,6 @@ class Store {
   // This will just return the property on the `data` object
   get(key) {
     // my json is 2 deep
-    console.log("getting key: " + key);
     const myArr = key.split(".");
     return this.data[myArr[0]][myArr[1]];
   }
