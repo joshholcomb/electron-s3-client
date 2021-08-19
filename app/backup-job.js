@@ -22,6 +22,7 @@ class BackupJob {
     certFile;
     encrypt = false;
     runStatus = true;
+    guimode = false;    // set if running in gui mode
 
     // private variables
     s3;
@@ -79,6 +80,29 @@ class BackupJob {
         this.encrypt = encrypt;
     }
 
+    setGuiMode(gui) {
+        this.guimode = gui;
+    }
+
+    //
+    // if running in gui mode
+    //
+    consoleAppend(msg) {
+        var ta = document.getElementById("txtConsole");
+        var val = ta.value;
+        if (val) {
+            ta.value = val + '\n' + msg;
+        } else {
+            ta.value = msg;
+        }
+    
+        // scroll to end
+        ta.scrollTop = ta.scrollHeight;
+    
+        // if more than 200 lines - remove all but 200 lines
+        var txt = ta.value.length ? ta.value.split(/\n/g) : [];
+        ta.value = txt.slice(-200).join("\n");
+    }
 
     // backup a specified folder to a specified s3 target
     doBackup(localFolder, s3Bucket, s3Folder) {
@@ -86,6 +110,9 @@ class BackupJob {
         let limit = pLimit(this.config.get("config.numThreads"));
         console.log("traversing directory [" + localFolder + "]");
         const files = this.listLocalFiles(localFolder);
+        if (this.guimode === true) {
+            this.consoleAppend("files found: [" + files.length + "]")
+        }
         console.log("files found: [" + files.length + "]");
         
         var fCount = 0;
@@ -94,6 +121,9 @@ class BackupJob {
             const i = fCount;
 
             if (!this.runStatus) {
+                if (gui === true) {
+                    this.consoleAppend("run status is false.");
+                }
                 console.log("run status is false.");
                 break;
             }
@@ -209,8 +239,14 @@ class BackupJob {
                 } catch (err) {
                     console.log("ERROR - file: " + f + " err: " + err.stack);
                 }
+            }
+            if (this.guimode === true) {
+                this.consoleAppend("processed file: " + f);
             }   
         } else {
+            if (this.guimode === true) {
+                this.consoleAppend("file [" + f + "] - s3 object is current");
+            }
             console.log("file [" + f + "] - s3 object is current");
         }
     }
@@ -247,7 +283,7 @@ class BackupJob {
                 
         // see if local timestamp is newer
         s3LastModified = data.LastModified;
-        localFileLastModified = null;
+        let localFileLastModified = null;
         try {
             let stats = fs.statSync(f);
             localFileLastModified = stats.mtime;
@@ -285,7 +321,11 @@ class BackupJob {
         };
 
         let data = await this.s3.listObjectsV2(params).promise();
-            
+        
+        if (this.guimode === true) {
+            this.consoleAppend("objects found: " + data.Contents.length);
+        }
+
         console.log("objects found: " + data.Contents.length);
 
         var j = 0;
@@ -359,6 +399,10 @@ class BackupJob {
                 }
             });
         }
+
+        if (this.guimode === true) {
+            this.consoleAppend("processed file: " + fullPath);
+        } 
     }
 
     //
