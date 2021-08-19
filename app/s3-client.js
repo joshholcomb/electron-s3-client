@@ -22,7 +22,48 @@ const argv = yargs
     .command('backup', 'backs up specified folder')
     .command('listfolders', 'lists the top level folders in this bucket')
     .command('restore', 'restore data to local directory')
-    .command('config', 'command to configure the app')
+    .command('config', 'command to configure the app', {
+        threads: {
+            describe: 'number of threads to run',
+            demandOption: false,
+            type: 'text'
+        },
+        endpoint: {
+            describe: 's3 endpoint to use',
+            demandOption: false,
+            type: 'text'
+        },
+        s3access: {
+            describe: 's3 access key',
+            demandOption: false,
+            type: 'text'
+        },
+        s3secret: {
+            describe: 's3 secret key',
+            demandOption: false,
+            type: 'text'
+        },
+        bucket: {
+            describe: 'default s3 bucket',
+            demandOption: false,
+            type: 'text'
+        },
+        encPass: {
+            describe: 'encryption password',
+            demandOption: false,
+            type: 'text'
+        },
+        tmpDir: {
+            describe: 'tmp dir for encrypted files',
+            demandOption: false,
+            type: 'text'
+        },
+        print: {
+            describe: 'print config',
+            demandOption: false,
+            type: 'boolean'
+        }
+    })
     .option('localdir', {
         alias: 'l',
         description: 'local directory',
@@ -42,15 +83,6 @@ const argv = yargs
         alias: 'e',
         description: 'flag to request encryption',
         type: 'boolean',
-    })
-    .option('threads', {
-        alias: 't',
-        description: 'number of threads to use for jobs',
-        type: 'text',
-    })
-    .option('endpoint', {
-        description: 'set s3 endpoint',
-        type: 'text',
     })
     .argv;
 
@@ -104,12 +136,17 @@ async function main() {
             backupJob.setEncryption(true);
         }
 
-        backupJob.backupFolderToS3(argv.localdir, argv.s3bucket, argv.s3folder);
+        backupJob.doBackup(argv.localdir, argv.s3bucket, argv.s3folder);
     }
 
     // listfolders job
     if (argv.listfolders === true) {
-        let bucket = argv.s3bucket;
+        let bucket = config.get("s3.defaultBucket");
+
+        if (argv.s3bucket) {
+            bucket = argv.s3bucket;
+        }
+        
         console.log("listing folders for bucket: " + bucket);
 
         let backupJob = new BackupJob(config, certFile);
@@ -129,14 +166,14 @@ async function main() {
             return;
         }
 
-        if (!argv.s3bucket) {
-            console.log("missing --s3bucket option");
-            return;
+        let bucket = config.get("s3.defaultBucket");
+        if (argv.s3bucket) {
+            bucket = argv.s3bucket;
         }
 
         let backupJob = new BackupJob(config, certFile);
         backupJob.connectToS3();
-        backupJob.doRestore(argv.localdir, argv.s3bucket, argv.s3folder);
+        backupJob.doRestore(argv.localdir, bucket, argv.s3folder);
     }
 
     // config app
@@ -148,7 +185,39 @@ async function main() {
 
         if (argv.endpoint) {
             config.set("s3.endpoint", argv.endpoint);
+            console.log("config - set endpoint to : " + argv.endpoint);
         }
+
+        if (argv.s3access) {
+            config.set("s3.accessKey", argv.s3access);
+            console.log("config - set s3 access key to : " + argv.s3access);
+        }
+
+        if (argv.s3secret) {
+            config.set("s3.secretAccessKey", argv.s3secret);
+            console.log("config - set s3 secret key to : " + argv.s3secret);
+        }
+
+        if (argv.bucket) {
+            config.set("s3.defaultBucket", argv.bucket);
+            console.log("config - set defaultBucket to : " + argv.bucket);
+        }
+
+        if (argv.encPass) {
+            config.set("encryption.passphrase", argv.encPass);
+            console.log("config - set encryption.passphrase to : " + argv.encPass);
+        }
+
+        if (argv.tmpDir) {
+            config.set("encryption.tmpDir", argv.tmpDir);
+            console.log ("config - set encryption.tmpDir to : " + argv.tmpDir);
+        }
+
+        if (argv.print === "true") {
+            console.log("config: " + JSON.stringify(config.data, null, 2));
+        }
+
+        
     }
 }
 

@@ -29,8 +29,6 @@ class Encryptor {
     }
 
     async decryptFile(inFile, outFile, password) {
-        console.log("reading encFile: [" + inFile + "]");
-
         var readIv = 
             fs.createReadStream(inFile, { end: 15 });
 

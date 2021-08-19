@@ -9,7 +9,6 @@ var https = require('https');
 
 /*
 * class: BackupJob
-*   has all data for a backup job
 */
 class BackupJob {
     jobName;            // name of the job
@@ -82,7 +81,7 @@ class BackupJob {
 
 
     // backup a specified folder to a specified s3 target
-    backupFolderToS3(localFolder, s3Bucket, s3Folder) {
+    doBackup(localFolder, s3Bucket, s3Folder) {
         let promises = [];
         let limit = pLimit(this.config.get("config.numThreads"));
         console.log("traversing directory [" + localFolder + "]");
@@ -339,7 +338,6 @@ class BackupJob {
         // if encrypted - decrypt file
         // file.enc - length = 8 - pos = 4
         if (key.substring(key.length - 4) === ".enc") {
-            console.log("file is encrypted. decrypting now");
             let encryptor = new Encryptor();
             let decryptedFile = fullPath.substring(0, fullPath.length - 4);
          
