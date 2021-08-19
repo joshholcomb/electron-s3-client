@@ -84,6 +84,10 @@ class BackupJob {
         this.guimode = gui;
     }
 
+    setRunStatus(status) {
+        this.runStatus = status;
+    }
+
     //
     // if running in gui mode
     //
@@ -177,6 +181,10 @@ class BackupJob {
     // process a single file for upload
     //
     async processFileForUpload(f, bucket, key) {
+
+        if (this.runStatus === false) {
+            return;
+        }
         // analyze the file to see if we need to upload
         // does files exist on s3 bucket.  if so, is it outdated?
         let doUpload = await this.analyzeFile(f, key, bucket);
@@ -354,6 +362,9 @@ class BackupJob {
     // process a single file for download
     //
     async processFileForDownload(localDir, bucket, key) {
+        if (this.runStatus === false) {
+            return;
+        }
     
         // setup the directory for download
         let writeDir = localDir + "/" + key.substring(0, key.lastIndexOf("/"));

@@ -81,6 +81,10 @@ const updateFolder = async () => {
     
 }
 
+// make backup job global
+var certFile = "./config/my-ca-cert.crt";
+var backupJob = new BackupJob(config, certFile);
+
 //
 // invoked when user clicks the list buckets button
 //
@@ -135,6 +139,7 @@ function backupButton() {
 function stopButton() {
     console.log("setting runStatus = false");
     runStatus = false;
+    backupJob.setRunStatus(false);
     consoleAppend("job stop msg sent");
 }
 
@@ -265,8 +270,6 @@ function listBuckets() {
 //
 async function listBucketFoldersV2(bucket) {
     consoleAppend("listing bucket contents for bucket: [" + bucket + "]");
-    let certFile = "./config/my-ca-cert.crt";
-    let backupJob = new BackupJob(config, certFile);
     backupJob.connectToS3();
     var folders = await backupJob.listBucketFolders(bucket);
     consoleAppend("===results: " + folders.length + "===");
@@ -277,11 +280,11 @@ async function listBucketFoldersV2(bucket) {
 }
 
 // sleep function
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
+async function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 function uploadFilesToS3V2(bucket, folderName) {
-    let certFile = "./config/my-ca-cert.crt";
-    let backupJob = new BackupJob(config, certFile);
     backupJob.connectToS3();
 
     let doEncrypt = document.getElementById("encryptCheckBox").checked;
@@ -296,19 +299,7 @@ function uploadFilesToS3V2(bucket, folderName) {
 
 
 function downloadFilesFromS3V2(bucket, folderName, localDir) {
-    let certFile = "./config/my-ca-cert.crt";
-    let backupJob = new BackupJob(config, certFile);
     backupJob.connectToS3();
     backupJob.setGuiMode(true);
     backupJob.doRestore(localDir, bucket, folderName);
 }
-
-process.on('unhandledRejection', (err) => {
-    console.log("error: " + err);
-    process.exit(1);
-});
-
-process.on('uncaughtException', (err) => {
-    console.log("error: " + err);
-    process.exit(1);
-})
