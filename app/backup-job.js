@@ -106,6 +106,13 @@ class BackupJob {
         ta.value = txt.slice(-200).join("\n");
     }
 
+    // update runtime if in guimode
+    updateRuntime(m, s) {
+        let dur = `${m}:${(s < 10 ? "0" : "")}${s}`;
+        let l = document.getElementById("lblRunTime");
+        l.textContent = dur;
+    }
+
     // backup a specified folder to a specified s3 target
     doBackup(localFolder, s3Bucket, s3Folder) {
         let promises = [];
@@ -125,6 +132,7 @@ class BackupJob {
             let stats = {};
             stats.fCounter = fCount;
             stats.fCount = files.length;
+            stats.startTime = Date.now();
 
             if (!this.runStatus) {
                 if (this.guimode === true) {
@@ -257,6 +265,17 @@ class BackupJob {
         let doUpload = await this.analyzeFile(f, key, bucket);
         console.log("\tdoUpload: " + doUpload);
 
+        // do a little timing
+        if (stats.fCounter % 5 === 0) {
+            let t = Date.now();
+            let ms = t - stats.startTime;
+            let m = Math.floor(ms / 60000);
+            let s = ((ms % 60000) / 1000).toFixed(0);
+            if (this.guimode === true) {
+                this.updateRuntime(m,s);
+            }
+            console.log("runTime: " + m + "m - " + s + "s");
+        }
 
         // see if we need to upload
         if (doUpload === true) {
@@ -400,6 +419,19 @@ class BackupJob {
     async processFileForDownload(localDir, bucket, key, stats) {
         if (this.runStatus === false) {
             return;
+        }
+
+
+         // do a little timing
+         if (stats.fCounter % 5 === 0) {
+            let t = Date.now();
+            let ms = t - stats.startTime;
+            let m = Math.floor(ms / 60000);
+            let s = ((ms % 60000) / 1000).toFixed(0);
+            if (this.guimode === true) {
+                this.updateRuntime(m,s);
+            }
+            console.log("runTime: " + m + "m - " + s + "s");
         }
     
         // setup the directory for download
