@@ -111,6 +111,7 @@ function lsObjectsButton() {
 //
 function backupButton() {
     runStatus = true;
+    backupJob.setRunStatus(true);
 
     var dirField = document.getElementById("txtLocalFolder");
     if (dirField.value.length == 0) {
@@ -258,7 +259,7 @@ function listBuckets() {
           console.log(err, err.stack); // an error occurred
       } else {
         data.Buckets.forEach(function(i) {
-            consoleAppend("bucket: " + i.Name);
+            consoleAppend("bucket: [" + i.Name + "]");
         });
       }
       

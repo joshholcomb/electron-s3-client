@@ -127,7 +127,7 @@ class BackupJob {
             stats.fCount = files.length;
 
             if (!this.runStatus) {
-                if (gui === true) {
+                if (this.guimode === true) {
                     this.consoleAppend("run status is false.");
                 }
                 console.log("run status is false.");
@@ -159,8 +159,27 @@ class BackupJob {
 
     }
 
+
+    async listS3Keys(params, allKeys) {
+        var self = this;
+        let data = await this.s3.listObjectsV2(params).promise();
+        var contents = data.Contents;
+        contents.forEach(function(content) {
+            allKeys.push(content.Key);
+        });
+
+        if (data.isTruncated) {
+            if (this.guimode === true) this.consoleAppend("fetching continuation.");
+            params.ContinuationToken = data.NextContinuationToken;
+            self.listS3Keys();
+        } else {
+            return allKeys;
+        }
+    }
+
+
      // restore job
-     async doRestore(localFolder, bucket, s3Folder) {
+    async doRestore(localFolder, bucket, s3Folder) {
         let promises = [];
         let limit = pLimit(parseInt(this.config.get("config.numThreads"), 10));
 
@@ -169,16 +188,17 @@ class BackupJob {
             Prefix: s3Folder
         };
 
-        let data = await this.s3.listObjectsV2(params).promise();
+        let allKeys = [];
+        allKeys = await this.listS3Keys(params, allKeys);
         
         if (this.guimode === true) {
-            this.consoleAppend("objects found: " + data.Contents.length);
+            this.consoleAppend("objects found: " + allKeys.length);
         }
 
-        console.log("objects found: " + data.Contents.length);
+        console.log("objects found: " + allKeys.length);
 
         var j = 0;
-        for (let o of data.Contents) {
+        for (let k of allKeys) {
 
             if (this.runStatus === false) {
                 break;
@@ -188,13 +208,13 @@ class BackupJob {
             const counter = j;
             let stats = {};
             stats.fCounter = counter;
-            stats.fCount = data.Contents.length;
+            stats.fCount = allKeys.length;
 
             promises.push(
                 limit(() => this.processFileForDownload(
                     localFolder,
                     bucket,
-                    o.Key,
+                    k,
                     stats)
                 )
             );
@@ -330,8 +350,9 @@ class BackupJob {
             if (err.code === 'NotFound') {
                 return doUpload;
             } else {
+                if (this.guimode === true) this.consoleAppend("headObject error - file: " + key + " error : " + err);
                 console.log("error analyzing file. " + err);
-                return false;
+                return true;
             }
         }
 
@@ -455,6 +476,7 @@ class BackupJob {
     }
 
     listLocalFiles(dirPath, arrayOfFiles) {
+        var self = this;
         let files = [];
 
         try {
@@ -468,7 +490,7 @@ class BackupJob {
         files.forEach(function(file) {
             let abs = path.join(dirPath, file);
             if (fs.statSync(abs).isDirectory()) {
-                arrayOfFiles = this.getAllFiles(abs, arrayOfFiles)
+                arrayOfFiles = self.listLocalFiles(abs, arrayOfFiles);
             } else {
                 arrayOfFiles.push(abs)
             }
