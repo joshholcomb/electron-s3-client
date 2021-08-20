@@ -16,13 +16,11 @@ class BackupJob {
     s3Bucket;           // s3 bucket containing the data
     s3Folder;           // s3 folder containing the data
     s3;                 // s3 connection object
-    dayOfWeek = 0;      // schedule - what day of week to run job
-    hourOfDay = 0;      // schedule - what hour of day to run job
     config;             // configuration from config file
-    certFile;
-    encrypt = false;
-    runStatus = true;
-    guimode = false;    // set if running in gui mode
+    certFile;           // we need a custom crt file for our ssl config
+    encrypt = false;    // flag to encrypt data before uploading
+    runStatus = true;   // toggle for stopping a long running job
+    guimode = false;    // set if running in gui mode (log status to electron)
 
     // private variables
     s3;
@@ -111,7 +109,7 @@ class BackupJob {
     // backup a specified folder to a specified s3 target
     doBackup(localFolder, s3Bucket, s3Folder) {
         let promises = [];
-        let limit = pLimit(this.config.get("config.numThreads"));
+        let limit = pLimit(parseInt(this.config.get("config.numThreads"), 10));
         console.log("traversing directory [" + localFolder + "]");
         const files = this.listLocalFiles(localFolder);
         if (this.guimode === true) {
@@ -123,6 +121,10 @@ class BackupJob {
         for (const f of files) {
             fCount = fCount + 1;
             const i = fCount;
+
+            let stats = {};
+            stats.fCounter = fCount;
+            stats.fCount = files.length;
 
             if (!this.runStatus) {
                 if (gui === true) {
@@ -145,7 +147,8 @@ class BackupJob {
                 limit( () => this.processFileForUpload( 
                     f, 
                     s3Bucket, 
-                    key)
+                    key,
+                    stats)
                 )
             );
         }
@@ -154,6 +157,50 @@ class BackupJob {
             const result = await Promise.all(promises);
         });
 
+    }
+
+     // restore job
+     async doRestore(localFolder, bucket, s3Folder) {
+        let promises = [];
+        let limit = pLimit(parseInt(this.config.get("config.numThreads"), 10));
+
+        var params = {
+            Bucket: bucket,
+            Prefix: s3Folder
+        };
+
+        let data = await this.s3.listObjectsV2(params).promise();
+        
+        if (this.guimode === true) {
+            this.consoleAppend("objects found: " + data.Contents.length);
+        }
+
+        console.log("objects found: " + data.Contents.length);
+
+        var j = 0;
+        for (let o of data.Contents) {
+
+            if (this.runStatus === false) {
+                break;
+            }
+
+            j++;
+            const counter = j;
+            let stats = {};
+            stats.fCounter = counter;
+            stats.fCount = data.Contents.length;
+
+            promises.push(
+                limit(() => this.processFileForDownload(
+                    localFolder,
+                    bucket,
+                    o.Key,
+                    stats)
+                )
+            );
+        }
+
+        const result = await Promise.all(promises);
     }
 
     async listBucketFolders(bucket) {
@@ -180,7 +227,7 @@ class BackupJob {
     //
     // process a single file for upload
     //
-    async processFileForUpload(f, bucket, key) {
+    async processFileForUpload(f, bucket, key, stats) {
 
         if (this.runStatus === false) {
             return;
@@ -223,8 +270,10 @@ class BackupJob {
                 params.Body = fileStream;
                 try {
                     const data = await this.s3.upload(params).promise();
+                    if (this.guimode === true) this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + uploadKey + "]");
                     console.log("uploaded [" + f + "] to [" + uploadKey + "]");
                 } catch (err) {
+                    if (this.guimode === true) this.consoleAppend("ERROR - file: " + f + " err: " + err.stack);
                     console.log("ERROR - file: " + f + " err: " + err.stack);
                 }
 
@@ -243,19 +292,18 @@ class BackupJob {
                 params.Body = fileStream;
                 try {
                     const data = await this.s3.upload(params).promise();
+                    if (this.guimode === true) this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + key + "]");
                     console.log("uploaded [" + f + "] to [" + key + "]");
                 } catch (err) {
+                    if (this.guimode === true) this.consoleAppend("ERROR - file: " + f + "err: " + err);
                     console.log("ERROR - file: " + f + " err: " + err.stack);
                 }
-            }
-            if (this.guimode === true) {
-                this.consoleAppend("processed file: " + f);
-            }   
+            }  
         } else {
             if (this.guimode === true) {
-                this.consoleAppend("file [" + f + "] - s3 object is current");
+                this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - file [" + f + "] - s3 object is current");
             }
-            console.log("file [" + f + "] - s3 object is current");
+            console.log("[" + stats.fCounter + " - " + stats.fCount + "] - s3 object is current");
         }
     }
 
@@ -318,50 +366,12 @@ class BackupJob {
         return(doUpload);
     }
 
-    // restore job
-    async doRestore(localFolder, bucket, s3Folder) {
-        let promises = [];
-        let limit = pLimit(this.config.get("config.numThreads"));
-
-        var params = {
-            Bucket: bucket,
-            Prefix: s3Folder
-        };
-
-        let data = await this.s3.listObjectsV2(params).promise();
-        
-        if (this.guimode === true) {
-            this.consoleAppend("objects found: " + data.Contents.length);
-        }
-
-        console.log("objects found: " + data.Contents.length);
-
-        var j = 0;
-        for (let o of data.Contents) {
-
-            if (this.runStatus === false) {
-                break;
-            }
-
-            j++;
-            const counter = j;
-
-            promises.push(
-                limit(() => this.processFileForDownload(
-                    localFolder,
-                    bucket,
-                    o.Key)
-                )
-            );
-        }
-
-        const result = await Promise.all(promises);
-    }
+   
 
     //
     // process a single file for download
     //
-    async processFileForDownload(localDir, bucket, key) {
+    async processFileForDownload(localDir, bucket, key, stats) {
         if (this.runStatus === false) {
             return;
         }
@@ -380,6 +390,7 @@ class BackupJob {
         try {
             await this.downloadObject(bucket, key, fullPath);
         } catch (err) {
+            if (this.guimode === true) this.consoleAppend("error downloading file: [" + f + "]");
             console.log("error downloading file: " + err);
         }
         
@@ -395,7 +406,8 @@ class BackupJob {
             await encryptor.decryptFile(fullPath, 
                 decryptedFile, 
                 this.config.get("encryption.passphrase"));
-            
+
+            if (this.guimode === true) this.consoleAppend("decrypted file: [" + decryptedFile + "]");
             console.log("decrypted file: [" + decryptedFile + "]");
     
             await this.delay(1500);
@@ -404,6 +416,7 @@ class BackupJob {
             await this.delay(1500);
             fs.unlink(fullPath, function (err) {
                 if (err) {
+                    if (this.guimode === true) this.consoleAppend("error deleting the enc file: " + err);
                     console.log("error deleting the encFile : " + err);
                 } else {
                     console.log("deleted encrypted file: " + fullPath);
@@ -412,7 +425,7 @@ class BackupJob {
         }
 
         if (this.guimode === true) {
-            this.consoleAppend("processed file: " + fullPath);
+            this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + " - processed file: " + fullPath);
         } 
     }
 
@@ -439,11 +452,6 @@ class BackupJob {
             });
     
         });
-    }
-
-    setBackupSchedule(dayOfWeek, hourOfDay) {
-        this.dayOfWeek = dayOfWeek;
-        this.hourOfDay = hourOfDay;
     }
 
     listLocalFiles(dirPath, arrayOfFiles) {
