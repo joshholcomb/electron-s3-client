@@ -343,6 +343,11 @@ class BackupJob {
             Key: key
         };
 
+        if (this.encrypt === true) {
+            // key will have .enc on end
+            params.Key = key + ".enc";
+        }
+
         let s3LastModified = null;
         try {
             const data = await this.s3.headObject(params).promise();
