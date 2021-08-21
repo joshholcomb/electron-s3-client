@@ -87,23 +87,27 @@ class BackupJob {
     }
 
     //
-    // if running in gui mode
+    // if running in guimode
     //
     consoleAppend(msg) {
-        var ta = document.getElementById("txtConsole");
-        var val = ta.value;
-        if (val) {
-            ta.value = val + '\n' + msg;
+        if (this.guimode === true) {
+            var ta = document.getElementById("txtConsole");
+            var val = ta.value;
+            if (val) {
+                ta.value = val + '\n' + msg;
+            } else {
+                ta.value = msg;
+            }
+        
+            // scroll to end
+            ta.scrollTop = ta.scrollHeight;
+        
+            // if more than 200 lines - remove all but 200 lines
+            var txt = ta.value.length ? ta.value.split(/\n/g) : [];
+            ta.value = txt.slice(-200).join("\n");
         } else {
-            ta.value = msg;
+            console.log(msg);
         }
-    
-        // scroll to end
-        ta.scrollTop = ta.scrollHeight;
-    
-        // if more than 200 lines - remove all but 200 lines
-        var txt = ta.value.length ? ta.value.split(/\n/g) : [];
-        ta.value = txt.slice(-200).join("\n");
     }
 
     // update runtime if in guimode
@@ -168,6 +172,35 @@ class BackupJob {
     }
 
 
+    // in case you have a local folder with encrypted data that needs decrypted
+    async decryptFolder(localDir) {
+        let files = this.listLocalFiles(localDir);
+
+        for (f of files) {
+            let dF = f.substring(0, f.length - 4);
+            let e = new Encryptor();
+
+            await encryptor.decryptFile(f, 
+                dF, 
+                this.config.get("encryption.passphrase"));
+
+            if (this.guimode === true) this.consoleAppend("decrypted file: [" + decryptedFile + "]");
+            console.log("decrypted file: [" + decryptedFile + "]");
+    
+            await this.delay(1500);
+            fs.unlink(f, function (err) {
+                if (err) {
+                    if (this.guimode === true) this.consoleAppend("error deleting the enc file: " + err);
+                    console.log("error deleting the encFile : " + err);
+                } else {
+                    console.log("deleted encrypted file: " + f);
+                }
+            });
+
+        }
+    }
+
+    // list all of the s3 keys
     async listS3Keys(params, allKeys) {
         var self = this;
         let data = await this.s3.listObjectsV2(params).promise();
@@ -177,7 +210,7 @@ class BackupJob {
         });
 
         if (data.isTruncated) {
-            if (this.guimode === true) this.consoleAppend("fetching continuation.");
+            this.consoleAppend("fetching continuation.");
             params.ContinuationToken = data.NextContinuationToken;
             self.listS3Keys();
         } else {
@@ -198,12 +231,7 @@ class BackupJob {
 
         let allKeys = [];
         allKeys = await this.listS3Keys(params, allKeys);
-        
-        if (this.guimode === true) {
-            this.consoleAppend("objects found: " + allKeys.length);
-        }
-
-        console.log("objects found: " + allKeys.length);
+        this.consoleAppend("objects found: " + allKeys.length);
 
         var j = 0;
         for (let k of allKeys) {
@@ -263,10 +291,9 @@ class BackupJob {
         // analyze the file to see if we need to upload
         // does files exist on s3 bucket.  if so, is it outdated?
         let doUpload = await this.analyzeFile(f, key, bucket);
-        console.log("\tdoUpload: " + doUpload);
 
         // do a little timing
-        if (stats.fCounter % 5 === 0) {
+        if (stats.fCounter % 25 === 0) {
             let t = Date.now();
             let ms = t - stats.startTime;
             let m = Math.floor(ms / 60000);
@@ -279,51 +306,15 @@ class BackupJob {
 
         // see if we need to upload
         if (doUpload === true) {
-            // see if we need to encrypt
-            console.log("\tdoEncrypt: " + this.encrypt);
 
             if (this.encrypt === true) {
-                console.log("encrypting file: " + f);
-                let encryptDir = this.config.get("encryption.tmpDir");
-                console.log("encryptionFolder: " + encryptDir);
                 let uploadKey = key + ".enc";
-                let encFile = encryptDir + "\\" + uploadKey;
-                encFile = encFile.replace(/\//g, '\\');
-                
-                // make sure directory exists
-                let e = encFile.substring(0, encFile.lastIndexOf("\\"));
-                fs.mkdirSync(e, { recursive: true});
 
                 // now encrypt
                 let encryptor = new Encryptor();
-                console.log("encrypting file: [" + f + "] to [" + encFile + "]");
                 let encKey = this.config.get("encryption.passphrase");
-                await encryptor.encryptFile(f, encFile, encKey);
-
-                await this.delay(1500);
-                
-                // upload the encrypted file
-                console.log("uploading encrypted file: " + encFile);
-                var params = {Bucket: bucket, Key: uploadKey, Body: ''};
-                var fileStream = fs.createReadStream(encFile);
-                params.Body = fileStream;
-                try {
-                    const data = await this.s3.upload(params).promise();
-                    if (this.guimode === true) this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + uploadKey + "]");
-                    console.log("uploaded [" + f + "] to [" + uploadKey + "]");
-                } catch (err) {
-                    if (this.guimode === true) this.consoleAppend("ERROR - file: " + f + " err: " + err.stack);
-                    console.log("ERROR - file: " + f + " err: " + err.stack);
-                }
-
-                // delete encFile
-                console.log("deleting encrypted file: " + encFile);
-                fs.unlink(encFile, function (err) {
-                    if (err) {
-                        console.log("error deleting the encFile : " + err);
-                    }
-                });
-                
+                await encryptor.encryptFileAndUploadStream(f, encKey, this.s3, bucket, uploadKey);
+                this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + uploadKey + "]");
             } else {
                 // do not encrypt - just upload
                 var params = {Bucket: bucket, Key: key, Body: ''};
@@ -331,18 +322,13 @@ class BackupJob {
                 params.Body = fileStream;
                 try {
                     const data = await this.s3.upload(params).promise();
-                    if (this.guimode === true) this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + key + "]");
-                    console.log("uploaded [" + f + "] to [" + key + "]");
+                    this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + key + "]");
                 } catch (err) {
-                    if (this.guimode === true) this.consoleAppend("ERROR - file: " + f + "err: " + err);
-                    console.log("ERROR - file: " + f + " err: " + err.stack);
+                    this.consoleAppend("ERROR - file: " + f + "err: " + err);
                 }
             }  
         } else {
-            if (this.guimode === true) {
-                this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - file [" + f + "] - s3 object is current");
-            }
-            console.log("[" + stats.fCounter + " - " + stats.fCount + "] - s3 object is current");
+            this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - file [" + f + "] - s3 object is current");
         }
     }
 
@@ -353,8 +339,6 @@ class BackupJob {
         let doUpload = true;
         let objectExists = false;
         let s3Outdated = false;
-
-        console.log("analyzing file: " + f);
 
         // see if object exists in s3
         var params = {
@@ -368,15 +352,22 @@ class BackupJob {
         }
 
         let s3LastModified = null;
-        try {
-            const data = await this.s3.headObject(params).promise();
-        } catch (err) {
-            if (err.code === 'NotFound') {
-                return doUpload;
-            } else {
-                if (this.guimode === true) this.consoleAppend("headObject error - file: " + key + " error : " + err);
-                console.log("error analyzing file. " + err);
-                return true;
+        let i = 0;
+        while (i < 3) {
+            try {
+                const data = await this.s3.headObject(params).promise();
+                break;
+            } catch (err) {
+                if (err.code === 'NotFound') {
+                    i = 4;
+                    return doUpload;
+                } else {
+                    this.consoleAppend("try [" + i + "] - headObject error - file: " + key + " error : " + err);
+                    i++;
+                    if (i >= 3) {
+                        return doUpload;
+                    }
+                }
             }
         }
 
@@ -394,11 +385,10 @@ class BackupJob {
             if (localDate > s3Date) {
                 s3Outdated = true;
                 console.log("\ts3 file is outdated");
-            } else {
-                console.log("\ts3 file is current");
-            }
+            } 
         } catch (error) {
-            console.log("error getting local file mtime.");
+            this.consoleAppend("error checking dates for file [" + f + "] - assume outdated.");
+            s3Outdated = true;
         }
         
         // if all of our tests passed, then do not upload
@@ -448,8 +438,7 @@ class BackupJob {
         try {
             await this.downloadObject(bucket, key, fullPath);
         } catch (err) {
-            if (this.guimode === true) this.consoleAppend("error downloading file: [" + f + "]");
-            console.log("error downloading file: " + err);
+            this.consoleAppend("error downloading file: [" + f + "]");
         }
         
         // give a 1/2 second for the file write to settle (not sure if we need this)
@@ -465,8 +454,7 @@ class BackupJob {
                 decryptedFile, 
                 this.config.get("encryption.passphrase"));
 
-            if (this.guimode === true) this.consoleAppend("decrypted file: [" + decryptedFile + "]");
-            console.log("decrypted file: [" + decryptedFile + "]");
+            this.consoleAppend("decrypted file: [" + decryptedFile + "]");
     
             await this.delay(1500);
 
@@ -481,10 +469,7 @@ class BackupJob {
                 }
             });
         }
-
-        if (this.guimode === true) {
-            this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + " - processed file: " + fullPath);
-        } 
+        this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + " - processed file: " + fullPath); 
     }
 
     //

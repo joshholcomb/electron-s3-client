@@ -134,6 +134,19 @@ function backupButton() {
     }
 }
 
+function decryptButton() {
+    runStatus = true;
+
+    let localDir = document.getElementById("txtLocalFolder").value;
+    if (!localDir) {
+        alert("You must select the directory to decrypt.");
+        return;
+    }
+
+    backupJob.decryptFolder(localDir);
+}
+
+
 //
 // invoked when user clicks the stop button
 //

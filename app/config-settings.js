@@ -47,8 +47,6 @@ try {
     numThreads.value = config.get("config.numThreads");
 
     // encryption
-    var encDir = document.getElementById("txtTmpEncDir");
-    encDir.value = config.get("encryption.tmpDir");
     var encPass = document.getElementById("txtEncPass");
     encPass.value = config.get("encryption.passphrase");
 } catch (err) {
@@ -72,8 +70,6 @@ function saveConfigSettings() {
     config.set("config.numThreads", numThreads);
 
     // encryption
-    let encDir = document.getElementById("txtTmpEncDir").value;
-    config.set("encryption.tmpDir", encDir);
     let encPass = document.getElementById("txtEncPass").value;
     config.set("encryption.passphrase", encPass);
     alert("values set.");
