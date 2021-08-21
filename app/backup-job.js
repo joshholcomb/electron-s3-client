@@ -111,10 +111,15 @@ class BackupJob {
     }
 
     // update runtime if in guimode
-    updateRuntime(m, s) {
-        let dur = `${m}:${(s < 10 ? "0" : "")}${s}`;
-        let l = document.getElementById("lblRunTime");
-        l.textContent = dur;
+    updateRuntime(m, s, eta) {
+        if (this.guimode === true) {
+            let dur = `${m}:${(s < 10 ? "0" : "")}${s}`;
+            let l = document.getElementById("lblRunTime");
+            l.textContent = dur;
+
+            let e = document.getElementById("lblETA");
+            e.textContent = `${eta} min`;
+        }
     }
 
     // backup a specified folder to a specified s3 target
@@ -177,26 +182,27 @@ class BackupJob {
         let files = this.listLocalFiles(localDir);
 
         for (f of files) {
-            let dF = f.substring(0, f.length - 4);
-            let e = new Encryptor();
+            if (f.substring(0, f.length - 4) === ".enc") {
+                let dF = f.substring(0, f.length - 4);
+                let e = new Encryptor();
 
-            await encryptor.decryptFile(f, 
-                dF, 
-                this.config.get("encryption.passphrase"));
+                await encryptor.decryptFile(f, 
+                    dF, 
+                    this.config.get("encryption.passphrase"));
 
-            if (this.guimode === true) this.consoleAppend("decrypted file: [" + decryptedFile + "]");
-            console.log("decrypted file: [" + decryptedFile + "]");
-    
-            await this.delay(1500);
-            fs.unlink(f, function (err) {
-                if (err) {
-                    if (this.guimode === true) this.consoleAppend("error deleting the enc file: " + err);
-                    console.log("error deleting the encFile : " + err);
-                } else {
-                    console.log("deleted encrypted file: " + f);
-                }
-            });
-
+                if (this.guimode === true) this.consoleAppend("decrypted file: [" + decryptedFile + "]");
+                console.log("decrypted file: [" + decryptedFile + "]");
+        
+                await this.delay(1500);
+                fs.unlink(f, function (err) {
+                    if (err) {
+                        if (this.guimode === true) this.consoleAppend("error deleting the enc file: " + err);
+                        console.log("error deleting the encFile : " + err);
+                    } else {
+                        console.log("deleted encrypted file: " + f);
+                    }
+                });
+            }
         }
     }
 
@@ -293,13 +299,14 @@ class BackupJob {
         let doUpload = await this.analyzeFile(f, key, bucket);
 
         // do a little timing
-        if (stats.fCounter % 25 === 0) {
+        if (stats.fCounter % 5 === 0) {
             let t = Date.now();
             let ms = t - stats.startTime;
             let m = Math.floor(ms / 60000);
             let s = ((ms % 60000) / 1000).toFixed(0);
+            let eta = Math.round((stats.fCount - stats.fCounter) / ((Math.floor(stats.fCounter / s)) * 60));
             if (this.guimode === true) {
-                this.updateRuntime(m,s);
+                this.updateRuntime(m,s, eta);
             }
             console.log("runTime: " + m + "m - " + s + "s");
         }
@@ -418,8 +425,9 @@ class BackupJob {
             let ms = t - stats.startTime;
             let m = Math.floor(ms / 60000);
             let s = ((ms % 60000) / 1000).toFixed(0);
+            let eta = Math.round((stats.fCount - stats.fCounter) / ((Math.floor(stats.fCounter / s)) * 60));
             if (this.guimode === true) {
-                this.updateRuntime(m,s);
+                this.updateRuntime(m,s, eta);
             }
             console.log("runTime: " + m + "m - " + s + "s");
         }
