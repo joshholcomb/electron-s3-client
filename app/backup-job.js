@@ -21,6 +21,7 @@ class BackupJob {
     encrypt = false;    // flag to encrypt data before uploading
     runStatus = true;   // toggle for stopping a long running job
     guimode = false;    // set if running in gui mode (log status to electron)
+    errorFiles;
 
     // private variables
     s3;
@@ -28,6 +29,7 @@ class BackupJob {
     constructor(config, certFile) {
         this.config = config;
         this.certFile = certFile;
+        this.errorFiles = [];
     }
 
     connectToS3() {
@@ -86,6 +88,10 @@ class BackupJob {
         this.runStatus = status;
     }
 
+    addErrorFile(f) {
+        this.errorFiles.push(f);
+    }
+
     //
     // if running in guimode
     //
@@ -112,13 +118,15 @@ class BackupJob {
 
     // update runtime if in guimode
     updateRuntime(m, s, eta) {
+        let dur = `${m}:${(s < 10 ? "0" : "")}${s}`;
         if (this.guimode === true) {
-            let dur = `${m}:${(s < 10 ? "0" : "")}${s}`;
             let l = document.getElementById("lblRunTime");
             l.textContent = dur;
 
             let e = document.getElementById("lblETA");
             e.textContent = `${eta} min`;
+        } else {
+            console.log("runtime: " + dur + " - eta: " + eta);
         }
     }
 
@@ -168,10 +176,16 @@ class BackupJob {
                     stats)
                 )
             );
+
+
         }
 
         (async () => {
-            const result = await Promise.all(promises);
+            const result = await Promise.all(promises).then(values => {
+                for (const f of this.errorFiles) {
+                    this.consoleAppend("error file: " + f);
+                }
+            });
         });
 
     }
@@ -305,10 +319,17 @@ class BackupJob {
             let m = Math.floor(ms / 60000);
             let s = ((ms % 60000) / 1000).toFixed(0);
             let eta = Math.round((stats.fCount - stats.fCounter) / ((Math.floor(stats.fCounter / s)) * 60));
-            if (this.guimode === true) {
-                this.updateRuntime(m,s, eta);
+            this.updateRuntime(m,s, eta);
+
+            // see if we have a stop file 
+            try {
+                if (fs.existsSync("./stop")) {
+                    this.consoleAppend("stop file found - setting run status to false.");
+                    this.setRunStatus(false);
+                }
+            } catch (err) {
+                this.consoleAppend("error checking for stop file: " + err);
             }
-            console.log("runTime: " + m + "m - " + s + "s");
         }
 
         // see if we need to upload
@@ -320,18 +341,40 @@ class BackupJob {
                 // now encrypt
                 let encryptor = new Encryptor();
                 let encKey = this.config.get("encryption.passphrase");
-                await encryptor.encryptFileAndUploadStream(f, encKey, this.s3, bucket, uploadKey);
-                this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + uploadKey + "]");
+                let i = 0;
+                while (i < 3) {
+                    try {
+                        await encryptor.encryptFileAndUploadStream(f, encKey, this.s3, bucket, uploadKey);
+                        this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + uploadKey + "]");
+                        break;
+                    } catch (err) {
+                        this.consoleAppend("error uploading file [" + f + "] - err: " + err);
+                        if (i == 2) {
+                            this.addErrorFile(f);
+                        }
+                        i++;
+                        await this.delay(5000);
+                    }
+                }
             } else {
                 // do not encrypt - just upload
                 var params = {Bucket: bucket, Key: key, Body: ''};
                 var fileStream = fs.createReadStream(f);
                 params.Body = fileStream;
-                try {
-                    const data = await this.s3.upload(params).promise();
-                    this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + key + "]");
-                } catch (err) {
-                    this.consoleAppend("ERROR - file: " + f + "err: " + err);
+                let i = 0;
+                while (i < 3) {
+                    try {
+                        const data = await this.s3.upload(params).promise();
+                        this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + key + "]");
+                        break;
+                    } catch (err) {
+                        this.consoleAppend("ERROR - file: " + f + "err: " + err);
+                        if (i == 2) {
+                            this.addErrorFile(f);
+                        }
+                        i++;
+                        await this.delay(5000);
+                    }
                 }
             }  
         } else {
@@ -360,9 +403,10 @@ class BackupJob {
 
         let s3LastModified = null;
         let i = 0;
+        let data = "";
         while (i < 3) {
             try {
-                const data = await this.s3.headObject(params).promise();
+                data = await this.s3.headObject(params).promise();
                 break;
             } catch (err) {
                 if (err.code === 'NotFound') {
@@ -370,6 +414,7 @@ class BackupJob {
                     return doUpload;
                 } else {
                     this.consoleAppend("try [" + i + "] - headObject error - file: " + key + " error : " + err);
+                    await this.delay(2500);
                     i++;
                     if (i >= 3) {
                         return doUpload;
@@ -426,10 +471,17 @@ class BackupJob {
             let m = Math.floor(ms / 60000);
             let s = ((ms % 60000) / 1000).toFixed(0);
             let eta = Math.round((stats.fCount - stats.fCounter) / ((Math.floor(stats.fCounter / s)) * 60));
-            if (this.guimode === true) {
-                this.updateRuntime(m,s, eta);
+            this.updateRuntime(m,s, eta);
+
+            // see if we have a stop file 
+            try {
+                if (fs.existsSync("./stop")) {
+                    this.consoleAppend("stop file found - setting run status to false.");
+                    this.setRunStatus(false);
+                }
+            } catch (err) {
+                this.consoleAppend("error checking for stop file: " + err);
             }
-            console.log("runTime: " + m + "m - " + s + "s");
         }
     
         // setup the directory for download

@@ -16,8 +16,6 @@ var AWS = require('aws-sdk');
 var https = require('https');
 const BackupJob = require('./backup-job');
 
-let runStatus = true;
-
 const pLimit = require('p-limit');
 // end globals
 
@@ -110,7 +108,6 @@ function lsObjectsButton() {
 // invoked when user clicks the backup button
 //
 function backupButton() {
-    runStatus = true;
     backupJob.setRunStatus(true);
 
     var dirField = document.getElementById("txtLocalFolder");
@@ -135,8 +132,6 @@ function backupButton() {
 }
 
 function decryptButton() {
-    runStatus = true;
-
     let localDir = document.getElementById("txtLocalFolder").value;
     if (!localDir) {
         alert("You must select the directory to decrypt.");
@@ -152,7 +147,6 @@ function decryptButton() {
 //
 function stopButton() {
     console.log("setting runStatus = false");
-    runStatus = false;
     backupJob.setRunStatus(false);
     consoleAppend("job stop msg sent");
 }
@@ -170,7 +164,6 @@ function clearConsoleButton() {
 // invoked when user clicks the restore button
 //
 function restoreButton() {
-    runStatus = true;
 
     var dirField = document.getElementById("txtLocalFolder");
     if (dirField.value.length == 0) {
