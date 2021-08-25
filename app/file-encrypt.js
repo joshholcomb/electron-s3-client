@@ -5,6 +5,8 @@ const zlib = require('zlib');
 
 const AppendInitVect = require('./append-init-vect.js');
 const stream = require('stream');
+const Throttle = require('throttle-stream');
+const { config } = require('aws-sdk');
 
 
 // sleep function
@@ -29,7 +31,7 @@ class Encryptor {
         
     }
 
-    async encryptFileAndUploadStream(inFile, password, s3, bucket, key) {
+    async encryptFileAndUploadStream(inFile, password, s3, bucket, key, bps) {
         let initVect = crypto.randomBytes(16);
         let k = this.getCipherKey(password);
         let readStream = fs.createReadStream(inFile);
@@ -37,22 +39,28 @@ class Encryptor {
         let cipher = crypto.createCipheriv("aes-256-cbc", k, initVect);
         let appendInitVect = new AppendInitVect(initVect);
 
-        const {writeStream, promise} = this.uploadStream(s3, {Bucket: bucket, Key: key});
-
-        readStream
+        try {
+            const {writeStream, promise} = this.uploadStream(s3, {Bucket: bucket, Key: key});
+            const throttle = new Throttle({ bytes: bps, interval: 1000 });  // 100kbps
+        
+            readStream
             .pipe(gzip)
             .pipe(cipher)
             .pipe(appendInitVect)
+            .pipe(throttle)
             .pipe(writeStream);
+        } catch (err) {
+            console.log("error encrypting and uploading file: " + err);
+        }
     }
 
     uploadStream = (s3, { Bucket, Key }) => {
         const pass = new stream.PassThrough();
         return {
-          writeStream: pass,
-          promise: s3.upload({ Bucket, Key, Body: pass }).promise(),
+            writeStream: pass,
+            promise: s3.upload({ Bucket, Key, Body: pass }).promise(),
         };
-      }
+    }
 
     async decryptFile(inFile, outFile, password) {
         var readIv = 

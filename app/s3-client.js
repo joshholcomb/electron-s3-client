@@ -58,6 +58,11 @@ const argv = yargs
             demandOption: false,
             type: 'text'
         },
+        bandwidth: {
+            describe: 'set upload bytes per second',
+            demandOption: false,
+            type: 'text'
+        },
         print: {
             describe: 'print config',
             demandOption: false,
@@ -213,10 +218,14 @@ async function main() {
             console.log ("config - set encryption.tmpDir to : " + argv.tmpDir);
         }
 
+        if (argv.bandwidth) {
+            config.set("config.bandwidth", argv.bandwidth);
+            console.log("config - set bandwidth to : " + argv.bandwidth);
+        }
+
         if (argv.print === "true") {
             console.log("config: " + JSON.stringify(config.data, null, 2));
         }
-
         
     }
 }

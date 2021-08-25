@@ -49,6 +49,10 @@ try {
     // encryption
     var encPass = document.getElementById("txtEncPass");
     encPass.value = config.get("encryption.passphrase");
+
+    // bandwidth
+    var bandwidth = document.getElementById("txtBandwidth");
+    bandwidth.value = config.get("config.bandwidth");
 } catch (err) {
     console.log(err);
 }
@@ -72,6 +76,10 @@ function saveConfigSettings() {
     // encryption
     let encPass = document.getElementById("txtEncPass").value;
     config.set("encryption.passphrase", encPass);
+
+    // bandwidth
+    let bandwidth = document.getElementById("txtBandwidth").value;
+    config.set("config.bandwidth", bandwidth);
     alert("values set.");
 }
 

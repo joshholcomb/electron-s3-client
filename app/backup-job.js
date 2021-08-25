@@ -5,6 +5,7 @@ const AWS = require('aws-sdk');
 const Encryptor = require('./file-encrypt');    // file encryption
 const pLimit = require('p-limit');
 var https = require('https');
+const Throttle = require('throttle-stream');
 
 
 /*
@@ -40,7 +41,11 @@ class BackupJob {
             console.log(err.stack);
         }
     
-        var customAgent = new https.Agent({ca: fileContents});
+        var customAgent = new https.Agent({
+            ca: fileContents,
+            keepAlive: true,
+            maxSockets: 5
+        });
         try {
             AWS.config.update({
                 httpOptions: { agent: customAgent}
@@ -58,7 +63,7 @@ class BackupJob {
         AWS.config.update({
             maxRetries: 2,
             httpOptions: {
-                timeout: 240000,
+                timeout: 600000,
                 connectTimeout: 5000,
             },
         })
@@ -317,7 +322,7 @@ class BackupJob {
             let t = Date.now();
             let ms = t - stats.startTime;
             let m = Math.floor(ms / 60000);
-            let s = ((ms % 60000) / 1000).toFixed(0);
+            let s = Math.floor((ms % 60000) / 1000);
             let eta = Math.round((stats.fCount - stats.fCounter) / ((Math.floor(stats.fCounter / s)) * 60));
             this.updateRuntime(m,s, eta);
 
@@ -334,6 +339,13 @@ class BackupJob {
 
         // see if we need to upload
         if (doUpload === true) {
+            let throttleBps = 5000;
+            try {
+                throttleBps = parseInt(this.config.get("config.bandwidth"));
+            } catch (err) {
+                this.consoleAppend("throttle not set - using default of 5000 bytes per second");
+            }
+
 
             if (this.encrypt === true) {
                 let uploadKey = key + ".enc";
@@ -344,7 +356,9 @@ class BackupJob {
                 let i = 0;
                 while (i < 3) {
                     try {
-                        await encryptor.encryptFileAndUploadStream(f, encKey, this.s3, bucket, uploadKey);
+                        await encryptor.encryptFileAndUploadStream(f, 
+                            encKey, this.s3, bucket, 
+                            uploadKey, throttleBps);
                         this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + uploadKey + "]");
                         break;
                     } catch (err) {
@@ -358,17 +372,14 @@ class BackupJob {
                 }
             } else {
                 // do not encrypt - just upload
-                var params = {Bucket: bucket, Key: key, Body: ''};
-                var fileStream = fs.createReadStream(f);
-                params.Body = fileStream;
                 let i = 0;
                 while (i < 3) {
                     try {
-                        const data = await this.s3.upload(params).promise();
+                        await this.uploadFileAsStream(f, bucket, key, throttleBps);
                         this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + key + "]");
                         break;
                     } catch (err) {
-                        this.consoleAppend("ERROR - file: " + f + "err: " + err);
+                        this.consoleAppend("ERROR - file: " + f + " error: " + err);
                         if (i == 2) {
                             this.addErrorFile(f);
                         }
@@ -380,6 +391,22 @@ class BackupJob {
         } else {
             this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - file [" + f + "] - s3 object is current");
         }
+    }
+
+    async uploadFileAsStream (f, bucket, key, bps) {
+        let readStream = fs.createReadStream(f);
+        let encryptor = new Encryptor();
+        const {writeStream, promise} = this.uploadStream({Bucket: bucket, Key: key});
+        const throttle = new Throttle({ bytes: bps, interval: 1000 });  
+        readStream.pipe(throttle).pipe(writeStream);
+    }
+
+    uploadStream = ({ Bucket, Key }) => {
+        const pass = new stream.PassThrough();
+        return {
+            writeStream: pass,
+            promise: this.s3.upload({ Bucket, Key, Body: pass }).promise(),
+        };
     }
 
     //
@@ -469,7 +496,7 @@ class BackupJob {
             let t = Date.now();
             let ms = t - stats.startTime;
             let m = Math.floor(ms / 60000);
-            let s = ((ms % 60000) / 1000).toFixed(0);
+            let s = Math.floor((ms % 60000) / 1000);
             let eta = Math.round((stats.fCount - stats.fCounter) / ((Math.floor(stats.fCounter / s)) * 60));
             this.updateRuntime(m,s, eta);
 
