@@ -320,7 +320,7 @@ class BackupJob {
             let t = Date.now();
             let ms = t - stats.startTime;
             let m = Math.round(ms / 60000);
-            let s = Math.round(ms / 1000);
+            let s = ((ms % 60000) / 1000).toFixed(0);
             let rate = 1;
             if (m !== 0) {
                 rate = Math.round(stats.fCounter / m);
@@ -502,7 +502,7 @@ class BackupJob {
             let t = Date.now();
             let ms = t - stats.startTime;
             let m = Math.round(ms / 60000);
-            let s = Math.round(ms / 1000);
+            let s = ((ms % 60000) / 1000).toFixed(0);
             let rate = 1;
             if (m !== 0) {
                 rate = Math.round(stats.fCounter / m);
