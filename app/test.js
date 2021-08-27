@@ -1,18 +1,13 @@
+var Throttle = require('throttle');
+const fs = require('fs');
 
 
+var rs = fs.createReadStream("d:\\software\\os\\ubuntu-18.04.4-desktop-amd64.iso");
+var ws = fs.createWriteStream("d:\\software\\os\\ubuntu-out.iso");
+var t = new Throttle(500);
 
-let obj = {};
-obj.v = "test";
+rs
+.pipe(t)
+.pipe(ws);
 
-let b = ["config", "testProperty"];
-let a = [];
 
-if (!a[obj]) {
-    let o = {};
-    let o2 = {};
-    o2[b[1]] = "3";
-    o[b[0]] = o2;
-    a.push(o);
-}
-
-console.log(a);

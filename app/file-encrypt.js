@@ -2,11 +2,10 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
-
 const AppendInitVect = require('./append-init-vect.js');
 const stream = require('stream');
+const { pipeline } = require('stream/promises');
 const Throttle = require('throttle-stream');
-const { config } = require('aws-sdk');
 
 
 // sleep function
@@ -28,27 +27,26 @@ class Encryptor {
             .pipe(cipher)
             .pipe(appendInitVect)
             .pipe(writeStream);
-        
     }
 
-    async encryptFileAndUploadStream(inFile, password, s3, bucket, key, bps) {
-        let initVect = crypto.randomBytes(16);
-        let k = this.getCipherKey(password);
-        let readStream = fs.createReadStream(inFile);
-        let gzip = zlib.createGzip();
-        let cipher = crypto.createCipheriv("aes-256-cbc", k, initVect);
-        let appendInitVect = new AppendInitVect(initVect);
-
+    async encryptFileAndUploadStream(inFile, password, s3, bucket, key, kBps) {
         try {
-            const {writeStream, promise} = this.uploadStream(s3, {Bucket: bucket, Key: key});
-            const throttle = new Throttle({ bytes: bps, interval: 1000 });  // 100kbps
-        
-            readStream
-            .pipe(gzip)
-            .pipe(cipher)
-            .pipe(appendInitVect)
-            .pipe(throttle)
-            .pipe(writeStream);
+            let initVect = crypto.randomBytes(16);
+            let k = this.getCipherKey(password);
+            let readStream = fs.createReadStream(inFile);
+            let gzip = zlib.createGzip();
+            let cipher = crypto.createCipheriv("aes-256-cbc", k, initVect);
+            let appendInitVect = new AppendInitVect(initVect);
+            let throttle = new Throttle({ bytes: kBps * 1024, interval: 1000 });
+            var {writeStream, promise} = this.uploadStream(s3, {Bucket: bucket, Key: key});
+
+            await pipeline(readStream, 
+                gzip,
+                cipher,
+                appendInitVect,
+                throttle,
+                writeStream);
+
         } catch (err) {
             console.log("error encrypting and uploading file: " + err);
         }

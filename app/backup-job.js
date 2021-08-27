@@ -5,6 +5,8 @@ const AWS = require('aws-sdk');
 const Encryptor = require('./file-encrypt');    // file encryption
 const pLimit = require('p-limit');
 var https = require('https');
+const stream = require('stream');
+const { pipeline } = require('stream/promises');
 const Throttle = require('throttle-stream');
 
 
@@ -75,7 +77,7 @@ class BackupJob {
                 s3ForcePathStyle: true, // needed with minio?
                 signatureVersion: 'v4'
         });
-        console.log("connected...");
+        console.log("connected to endpoint: " + endpoint);
     
         this.s3 = s3;
     }
@@ -186,11 +188,7 @@ class BackupJob {
         }
 
         (async () => {
-            const result = await Promise.all(promises).then(values => {
-                for (const f of this.errorFiles) {
-                    this.consoleAppend("error file: " + f);
-                }
-            });
+            const result = await Promise.all(promises);
         });
 
     }
@@ -321,9 +319,14 @@ class BackupJob {
         if (stats.fCounter % 5 === 0) {
             let t = Date.now();
             let ms = t - stats.startTime;
-            let m = Math.floor(ms / 60000);
-            let s = Math.floor((ms % 60000) / 1000);
-            let eta = Math.round((stats.fCount - stats.fCounter) / ((Math.floor(stats.fCounter / s)) * 60));
+            let m = Math.round(ms / 60000);
+            let s = Math.round(ms / 1000);
+            let rate = 1;
+            if (m !== 0) {
+                rate = Math.round(stats.fCounter / m);
+            }
+            this.consoleAppend("rate per min: " + rate);
+            let eta = Math.round((stats.fCount - stats.fCounter) / rate);
             this.updateRuntime(m,s, eta);
 
             // see if we have a stop file 
@@ -339,11 +342,11 @@ class BackupJob {
 
         // see if we need to upload
         if (doUpload === true) {
-            let throttleBps = 5000;
+            let throttleKBs = 500;
             try {
-                throttleBps = parseInt(this.config.get("config.bandwidth"));
+                throttleKBs = parseInt(this.config.get("config.bandwidth"));
             } catch (err) {
-                this.consoleAppend("throttle not set - using default of 5000 bytes per second");
+                this.consoleAppend("throttle not set - using default of 500 KBps per second");
             }
 
 
@@ -358,7 +361,7 @@ class BackupJob {
                     try {
                         await encryptor.encryptFileAndUploadStream(f, 
                             encKey, this.s3, bucket, 
-                            uploadKey, throttleBps);
+                            uploadKey, throttleKBs);
                         this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + uploadKey + "]");
                         break;
                     } catch (err) {
@@ -375,7 +378,7 @@ class BackupJob {
                 let i = 0;
                 while (i < 3) {
                     try {
-                        await this.uploadFileAsStream(f, bucket, key, throttleBps);
+                        await this.uploadFileAsStream(f, bucket, key, throttleKBs);
                         this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + key + "]");
                         break;
                     } catch (err) {
@@ -393,12 +396,15 @@ class BackupJob {
         }
     }
 
-    async uploadFileAsStream (f, bucket, key, bps) {
+    async uploadFileAsStream (f, bucket, key, kBps) {
         let readStream = fs.createReadStream(f);
-        let encryptor = new Encryptor();
+        let throttle = new Throttle({ bytes: kBps * 1024, interval: 1000 });
         const {writeStream, promise} = this.uploadStream({Bucket: bucket, Key: key});
-        const throttle = new Throttle({ bytes: bps, interval: 1000 });  
-        readStream.pipe(throttle).pipe(writeStream);
+        await pipeline(
+            readStream,
+            throttle,
+            writeStream
+        );
     }
 
     uploadStream = ({ Bucket, Key }) => {
@@ -495,9 +501,14 @@ class BackupJob {
          if (stats.fCounter % 5 === 0) {
             let t = Date.now();
             let ms = t - stats.startTime;
-            let m = Math.floor(ms / 60000);
-            let s = Math.floor((ms % 60000) / 1000);
-            let eta = Math.round((stats.fCount - stats.fCounter) / ((Math.floor(stats.fCounter / s)) * 60));
+            let m = Math.round(ms / 60000);
+            let s = Math.round(ms / 1000);
+            let rate = 1;
+            if (m !== 0) {
+                rate = Math.round(stats.fCounter / m);
+            }
+            this.consoleAppend("rate per min: " + rate);
+            let eta = Math.round((stats.fCount - stats.fCounter) / rate);
             this.updateRuntime(m,s, eta);
 
             // see if we have a stop file 
