@@ -6,8 +6,8 @@ const Encryptor = require('./file-encrypt');    // file encryption
 const pLimit = require('p-limit');
 var https = require('https');
 const stream = require('stream');
-const { pipeline } = require('stream/promises');
 const Throttle = require('throttle-stream');
+const { pipeline } = require('stream/promises');
 
 
 /*
@@ -245,7 +245,7 @@ class BackupJob {
      // restore job
     async doRestore(localFolder, bucket, s3Folder) {
         let promises = [];
-        let limit = pLimit(parseInt(this.config.get("config.numThreads"), 10));
+        let limit = pLimit(parseInt(this.config.get("config.numThreads")));
 
         var params = {
             Bucket: bucket,
@@ -268,7 +268,9 @@ class BackupJob {
             let stats = {};
             stats.fCounter = counter;
             stats.fCount = allKeys.length;
+            stats.startTime = Date.now();
 
+            console.log("adding promise: " + stats.fCounter);
             promises.push(
                 limit(() => this.processFileForDownload(
                     localFolder,
@@ -279,7 +281,10 @@ class BackupJob {
             );
         }
 
-        const result = await Promise.all(promises);
+        const result = await Promise.all(promises).then((values) => {
+            console.log("finished");
+            this.delay(2000);
+        });
     }
 
     async listBucketFolders(bucket) {
@@ -314,31 +319,6 @@ class BackupJob {
         // analyze the file to see if we need to upload
         // does files exist on s3 bucket.  if so, is it outdated?
         let doUpload = await this.analyzeFile(f, key, bucket);
-
-        // do a little timing
-        if (stats.fCounter % 5 === 0) {
-            let t = Date.now();
-            let ms = t - stats.startTime;
-            let m = Math.round(ms / 60000);
-            let s = ((ms % 60000) / 1000).toFixed(0);
-            let rate = 1;
-            if (m !== 0) {
-                rate = Math.round(stats.fCounter / m);
-            }
-            this.consoleAppend("rate per min: " + rate);
-            let eta = Math.round((stats.fCount - stats.fCounter) / rate);
-            this.updateRuntime(m,s, eta);
-
-            // see if we have a stop file 
-            try {
-                if (fs.existsSync("./stop")) {
-                    this.consoleAppend("stop file found - setting run status to false.");
-                    this.setRunStatus(false);
-                }
-            } catch (err) {
-                this.consoleAppend("error checking for stop file: " + err);
-            }
-        }
 
         // see if we need to upload
         if (doUpload === true) {
@@ -394,13 +374,38 @@ class BackupJob {
         } else {
             this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - file [" + f + "] - s3 object is current");
         }
+
+        // do a little timing
+        if (stats.fCounter % 5 === 0) {
+            let t = Date.now();
+            let ms = t - stats.startTime;
+            let m = Math.round(ms / 60000);
+            let s = ((ms % 60000) / 1000).toFixed(0);
+            let rate = 1;
+            if (m !== 0) {
+                rate = Math.round(stats.fCounter / m);
+            }
+            this.consoleAppend("rate per min: " + rate);
+            let eta = Math.round((stats.fCount - stats.fCounter) / rate);
+            this.updateRuntime(m,s, eta);
+
+            // see if we have a stop file 
+            try {
+                if (fs.existsSync("./stop")) {
+                    this.consoleAppend("stop file found - setting run status to false.");
+                    this.setRunStatus(false);
+                }
+            } catch (err) {
+                this.consoleAppend("error checking for stop file: " + err);
+            }
+        }
     }
 
     async uploadFileAsStream (f, bucket, key, kBps) {
         let readStream = fs.createReadStream(f);
         let throttle = new Throttle({ bytes: kBps * 1024, interval: 1000 });
         const {writeStream, promise} = this.uploadStream({Bucket: bucket, Key: key});
-        await pipeline(
+        await stream.promises.pipeline(
             readStream,
             throttle,
             writeStream
@@ -492,13 +497,63 @@ class BackupJob {
     // process a single file for download
     //
     async processFileForDownload(localDir, bucket, key, stats) {
+
         if (this.runStatus === false) {
             return;
         }
 
+        // setup the directory for download
+        let writeDir = localDir + "/" + key.substring(0, key.lastIndexOf("/"));
+        let writeFile = key.substring(key.lastIndexOf("/") + 1);
+        writeDir = writeDir.replace(/\//g, '\\');
+        let fullPath = writeDir + "\\" + writeFile;
+        console.log("[" + stats.fCounter + " - " + stats.fCount + "] - downloading object: " + key);
+    
+        // make sure target directory exists on local folder
+        fs.mkdirSync(writeDir, { recursive: true});
+    
+        // download the object
+        if (key.substring(key.length - 4) === ".enc") {
+            let e = new Encryptor();
+            try {
+                fullPath = fullPath.substring(0, fullPath.length - 4);
 
-         // do a little timing
-         if (stats.fCounter % 5 === 0) {
+                if (fs.existsSync(fullPath)) {
+                    console.log("file already exists on restore point - skipping");
+                    return;
+                }
+
+                await e.downloadStreamAndDecrypt(this.s3, 
+                    bucket, key, 
+                    this.config.get("encryption.passphrase"), 
+                    fullPath,
+                    this.config.get("config.bandwidth")
+                );
+            } catch (err) {
+                console.log("error : " + err);
+            }
+        } else {
+            var params = {
+                Bucket: bucket,
+                Key: key
+            }
+            let readStream = this.s3.getObject(params).createReadStream();
+            let throttleKBs = 500;
+            try {
+                throttleKBs = parseInt(this.config.get("config.bandwidth"));
+            } catch (err) {
+                this.consoleAppend("throttle not set - using default of 500 KBps per second");
+            }
+            let throttle = new Throttle({ bytes: throttleKBs * 1024, interval: 1000 });
+            let writeStream = fs.createWriteStream(fullPath);
+            await pipeline(readStream, throttle, writeStream);
+        }
+        
+        this.consoleAppend("file processed");
+
+
+        // do a little timing
+        if (stats.fCounter % 10 === 0) {
             let t = Date.now();
             let ms = t - stats.startTime;
             let m = Math.round(ms / 60000);
@@ -520,54 +575,11 @@ class BackupJob {
             } catch (err) {
                 this.consoleAppend("error checking for stop file: " + err);
             }
-        }
-    
-        // setup the directory for download
-        let writeDir = localDir + "/" + key.substring(0, key.lastIndexOf("/"));
-        let writeFile = key.substring(key.lastIndexOf("/") + 1);
-        writeDir = writeDir.replace(/\//g, '\\');
-        let fullPath = writeDir + "\\" + writeFile;
-        console.log("downloading object: " + key + " to local file: " + fullPath);
-    
-        // make sure target directory exists on local folder
-        fs.mkdirSync(writeDir, { recursive: true});
-    
-        // download the object
-        try {
-            await this.downloadObject(bucket, key, fullPath);
-        } catch (err) {
-            this.consoleAppend("error downloading file: [" + f + "]");
-        }
-        
-        // give a 1/2 second for the file write to settle (not sure if we need this)
-        await this.delay(2000);
-    
-        // if encrypted - decrypt file
-        // file.enc - length = 8 - pos = 4
-        if (key.substring(key.length - 4) === ".enc") {
-            let encryptor = new Encryptor();
-            let decryptedFile = fullPath.substring(0, fullPath.length - 4);
-         
-            await encryptor.decryptFile(fullPath, 
-                decryptedFile, 
-                this.config.get("encryption.passphrase"));
 
-            this.consoleAppend("decrypted file: [" + decryptedFile + "]");
-    
-            await this.delay(1500);
-
-            console.log("deleting encrypted file: " + fullPath);
-            await this.delay(1500);
-            fs.unlink(fullPath, function (err) {
-                if (err) {
-                    if (this.guimode === true) this.consoleAppend("error deleting the enc file: " + err);
-                    console.log("error deleting the encFile : " + err);
-                } else {
-                    console.log("deleted encrypted file: " + fullPath);
-                }
-            });
-        }
-        this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + " - processed file: " + fullPath); 
+            // print mem usage
+            const used = process.memoryUsage().heapUsed / 1024 / 1024;
+            console.log("memory usage: " + Math.round(used * 100) / 100 + "MB");
+        } 
     }
 
     //

@@ -10,8 +10,24 @@ const { Main } = require('electron');
 const yargs = require('yargs');
 const BackupJob = require('./backup-job');
 const Store = require('./store');
-
 // end globals
+
+// catch errors
+process.on('uncaughtException', (err) => {
+    console.log("error: " + err);
+});
+
+// catch kill signals
+process.once('SIGINT', function (code) {
+    console.log('SIGINT received...');
+    server.close();
+});
+
+process.once('SIGTERM', function (code) {
+    console.log('SIGTERM received...');
+    server.close();
+});
+
 
 
 
@@ -233,4 +249,6 @@ async function main() {
 
 
 main();
+
+
 
