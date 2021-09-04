@@ -6,8 +6,8 @@ const Encryptor = require('./file-encrypt');    // file encryption
 const pLimit = require('p-limit');
 var https = require('https');
 const stream = require('stream');
+const pipeline = require('stream').promises;
 const Throttle = require('throttle-stream');
-const { pipeline } = require('stream/promises');
 
 
 /*
@@ -270,7 +270,6 @@ class BackupJob {
             stats.fCount = allKeys.length;
             stats.startTime = Date.now();
 
-            console.log("adding promise: " + stats.fCounter);
             promises.push(
                 limit(() => this.processFileForDownload(
                     localFolder,
@@ -405,7 +404,7 @@ class BackupJob {
         let readStream = fs.createReadStream(f);
         let throttle = new Throttle({ bytes: kBps * 1024, interval: 1000 });
         const {writeStream, promise} = this.uploadStream({Bucket: bucket, Key: key});
-        await stream.promises.pipeline(
+        await pipeline(
             readStream,
             throttle,
             writeStream
@@ -529,10 +528,17 @@ class BackupJob {
                     fullPath,
                     this.config.get("config.bandwidth")
                 );
+                await this.delay(1000);
+
             } catch (err) {
                 console.log("error : " + err);
             }
         } else {
+            if (fs.existsSync(fullPath)) {
+                console.log("file already exists on restore point - skipping");
+                return;
+            }
+            
             var params = {
                 Bucket: bucket,
                 Key: key

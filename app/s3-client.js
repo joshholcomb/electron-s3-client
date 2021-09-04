@@ -20,12 +20,12 @@ process.on('uncaughtException', (err) => {
 // catch kill signals
 process.once('SIGINT', function (code) {
     console.log('SIGINT received...');
-    server.close();
+    process.exit(0);
 });
 
 process.once('SIGTERM', function (code) {
     console.log('SIGTERM received...');
-    server.close();
+    process.exit(0);
 });
 
 

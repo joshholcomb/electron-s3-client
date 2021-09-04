@@ -8,6 +8,7 @@ class RemoveInitVect extends Transform {
 
     _transform(chunk, encoding, cb) {
         if (!this.removed) {
+            console.log("removing init vect");
             try {
                 let toss = chunk.slice(0,16);
                 let keep = chunk.slice(16);

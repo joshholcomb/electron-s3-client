@@ -5,11 +5,9 @@ const zlib = require('zlib');
 const AppendInitVect = require('./append-init-vect.js');
 const RemoveInitVect = require('./remove-init-vect.js');
 const stream = require('stream');
-const { pipeline } = require('stream/promises');
 const Throttle = require('throttle-stream');
+const pipeline = require('util').promisify(require("stream").pipeline)
 
-// sleep function
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 class Encryptor {
 
@@ -26,6 +24,37 @@ class Encryptor {
             .pipe(gzip)
             .pipe(cipher)
             .pipe(appendInitVect)
+            .pipe(writeStream);
+    }
+
+    //
+    // decrypt a specific file
+    //
+    async decryptFile(inFile, outFile, password) {
+        var readIv = 
+            fs.createReadStream(inFile, { end: 15 });
+
+        let initVect = '';
+        initVect = await new Promise((resolve, reject) => {
+                readIv.on('data', (chunk) => {
+                    resolve(chunk);
+                });
+        });
+
+        if (!initVect) {
+            console.log("error reading init vector from file - returning");
+            return;
+        }
+        readIv.close();
+
+        let readStream = fs.createReadStream(inFile, { start: 16 });
+        let cipherKey = this.getCipherKey(password);
+        let decipher = crypto.createDecipheriv('aes-256-cbc', cipherKey, initVect);
+        let unzip = zlib.createGunzip();
+        let writeStream = fs.createWriteStream(outFile);
+        readStream
+            .pipe(decipher)
+            .pipe(unzip)
             .pipe(writeStream);
     }
 
@@ -70,109 +99,32 @@ class Encryptor {
             Key: s3key
         }
 
-        var rs = s3.getObject(params).createReadStream();
-        var iv = await new Promise(resolve => {
-            var gotiv = false
-            var ivtemp = null;
-            rs.on('readable', () => {
-                try {
-                    if(gotiv) {
-                        console.log("got iv.  returning");
-                        return;
-                    }
-                    
-                    ivtemp = rs.read(16);
-                    if(ivtemp) {
-                        console.log("read iv data.");
-                        gotiv = true;
-                        resolve(ivtemp);
-                    }
-                } catch (err) {
-                    console.log("error reading iv from stream: " + err);
+        let rs = s3.getObject(params).createReadStream();
+        let gotIv = false;
+        var iv;
+        var decipher = null;
+        let cipherKey = this.getCipherKey(passphrase);
+        let unzip = zlib.createGunzip();
+        let throttle = new Throttle({ bytes: kBps * 1024, interval: 1000 });
+        let ws = fs.createWriteStream(writeFile);
+
+        iv = await new Promise((resolve, reject) => {
+            rs.once('readable', () => {
+                if (gotIv === false) {
+                    iv = rs.read(16);
+                    gotIv = true;
+                    resolve(iv);
                 }
             });
         });
 
-        try {
-            let rs2 = s3.getObject(params).createReadStream();
-            let removeInitVect = new RemoveInitVect();
-            let cipherKey = this.getCipherKey(passphrase);
-            let decipher = crypto.createDecipheriv('aes-256-cbc', cipherKey, iv);
-            let unzip = zlib.createGunzip();
-            let writeStream = fs.createWriteStream(writeFile);
-            let throttle = new Throttle({ bytes: kBps * 1024, interval: 1000 });
-
-            rs2.on('error', (err) => {
-                console.log("error in read stream: " + err);
-            });
-
-            removeInitVect.on('error', (err) => {
-                console.log("error in remove init vect stream: " + err);
-            });
-
-            decipher.on('error', (err) => {
-                console.log("error on decipher stream: " + err);
-            });
-
-            unzip.on('error', (err) => {
-                console.log("error on unzip stream: " + err);
-            });
-
-            throttle.on('error', (err) => {
-                console.log("error on throttle stream: " + err);
-            });
-
-            writeStream.on('error', (err) => {
-                console.log("error on write stream: " + err);
-            });
-
-            await delay(1000);
-
-            console.log("starting pipeline");
-            
-            await pipeline(rs2,
-                removeInitVect,
-                decipher,
-                unzip,
-                throttle,
-                writeStream
-            );
-            
-            console.log("pipeline complete.");
-        } catch (err) {
-            console.log("error: " + err);
-        }
-    }
-
-    //
-    // decrypt a specific file
-    //
-    async decryptFile(inFile, outFile, password) {
-        var readIv = 
-            fs.createReadStream(inFile, { end: 15 });
-
-        let initVect = '';
-        readIv.on('data', (chunk) => {
-            initVect = chunk;
-        });
-        await delay(1500);
-
-        if (!initVect) {
-            console.log("error reading init vector from file - returning");
-            return;
-        }
-
-        readIv.close();
-
-        let readStream = fs.createReadStream(inFile, { start: 16 });
-        let cipherKey = this.getCipherKey(password);
-        let decipher = crypto.createDecipheriv('aes-256-cbc', cipherKey, initVect);
-        let unzip = zlib.createGunzip();
-        let writeStream = fs.createWriteStream(outFile);
-        readStream
-            .pipe(decipher)
-            .pipe(unzip)
-            .pipe(writeStream);
+        decipher = crypto.createDecipheriv('aes-256-cbc', cipherKey, iv);
+        await pipeline(rs, 
+            decipher, 
+            unzip, 
+            throttle, 
+            ws);
+        
     }
 
     getCipherKey(password) {

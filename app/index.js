@@ -9,17 +9,14 @@ const fs = require('fs');                     // for filesystem work
 var mkdirp = require('mkdirp');
 const Encryptor = require('./file-encrypt');    // file encryption
 const Store = require('./store');
-const app = require('electron');
-const remote = require('electron').remote;
-const dialog = remote.dialog;
+var electron = require('electron');
+var ipcRenderer = electron.ipcRenderer;
 var AWS = require('aws-sdk');
 var https = require('https');
 const BackupJob = require('./backup-job');
 
 const pLimit = require('p-limit');
 // end globals
-
-
 
 // display current directory
 consoleAppend("current directory: " + process.cwd());
@@ -67,7 +64,7 @@ const updateFolder = async () => {
     var lf = document.getElementById("txtLocalFolder");
 
     try {
-        const chosenFolders = await dialog.showOpenDialog({ properties: ['openDirectory']}); 
+        const chosenFolders = await ipcRenderer.invoke('get-folder'); 
         if (chosenFolders  && chosenFolders.canceled === false) {
             console.log("selected directory: " + chosenFolders.filePaths[0]);
             lf.value = chosenFolders.filePaths[0];
