@@ -343,7 +343,7 @@ class BackupJob {
                     try {
                         await encryptor.encryptFileAndUploadStream(f, 
                             encKey, this.s3, bucket, 
-                            uploadKey, throttleKBs);
+                            uploadKey, throttleKBs, stats.startTime);
                         this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + uploadKey + "]");
                         break;
                     } catch (err) {
@@ -411,9 +411,14 @@ class BackupJob {
         let readStream = fs.createReadStream(f);
         let throttle = new Throttle({ bytes: kBps * 1024, interval: 1000 });
         const {writeStream, promise} = this.uploadStream({Bucket: bucket, Key: key});
+        let stats = fs.statSync(f);
+        let fileSize = stats.size;
+        let pm = new ProgressMonitor(fileSize, f, true);
+
         await pipeline(
             readStream,
             throttle,
+            pm,
             writeStream
         );
     }

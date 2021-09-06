@@ -4,6 +4,7 @@ const path = require('path');
 const zlib = require('zlib');
 const AppendInitVect = require('./append-init-vect.js');
 const RemoveInitVect = require('./remove-init-vect.js');
+const ProgressMonitor = require('./progress-monitor');
 const stream = require('stream');
 const Throttle = require('throttle-stream');
 const pipeline = require('util').promisify(require("stream").pipeline)
@@ -58,7 +59,7 @@ class Encryptor {
             .pipe(writeStream);
     }
 
-    async encryptFileAndUploadStream(inFile, password, s3, bucket, key, kBps) {
+    async encryptFileAndUploadStream(inFile, password, s3, bucket, key, kBps, startTime) {
         try {
             let initVect = crypto.randomBytes(16);
             let k = this.getCipherKey(password);
@@ -68,12 +69,16 @@ class Encryptor {
             let appendInitVect = new AppendInitVect(initVect);
             let throttle = new Throttle({ bytes: kBps * 1024, interval: 1000 });
             var {writeStream, promise} = this.uploadStream(s3, {Bucket: bucket, Key: key});
+            let stats = fs.statSync(inFile);
+            let fileSize = stats.size;
+            let pm = new ProgressMonitor(fileSize, inFile, true, startTime);
 
             await pipeline(readStream, 
                 gzip,
                 cipher,
                 appendInitVect,
                 throttle,
+                pm,
                 writeStream);
 
         } catch (err) {
