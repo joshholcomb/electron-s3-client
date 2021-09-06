@@ -15,37 +15,33 @@ class ProgressMonitor extends Transform {
         this.push(chunk);
         let processedKb = Math.round(this.processedBytes / 1024);
         let totalKb = Math.round(this.totalBytes / 1024);
-        this.updateProgress(totalKb, processedKb);
 
-        // timing
-        let t = Date.now();
-        let ms = t - this.startTime;
-        let m = Math.round(ms / 60000);
-        let s = ((ms % 60000) / 1000).toFixed(0);
-        this.updateRuntime(m,s);
+        if (processedKb % 1000 === 0) {
+            this.consoleAppend(this.file + " - processed [" + processedKb + "KB] of [" + totalKb + "KB]");
+        }
 
         // callback
         cb();
     }
 
-    updateProgress(totalKb, processedKb) {
-        let p = `${processedKb}KB of ${totalKb}KB`;
+    consoleAppend(msg) {
         if (this.guimode === true) {
-            let l = document.getElementById("progress");
-            l.textContent = p;
+            var ta = document.getElementById("txtConsole");
+            var val = ta.value;
+            if (val) {
+                ta.value = val + '\n' + msg;
+            } else {
+                ta.value = msg;
+            }
+        
+            // scroll to end
+            ta.scrollTop = ta.scrollHeight;
+        
+            // if more than 200 lines - remove all but 200 lines
+            var txt = ta.value.length ? ta.value.split(/\n/g) : [];
+            ta.value = txt.slice(-200).join("\n");
         } else {
-            console.log(this.file + " - [" + processedKb + "KB] of [" + totalKb + "KB]");
-        }
-    }
-
-    // update runtime if in guimode
-    updateRuntime(m, s) {
-        let dur = `${m}:${(s < 10 ? "0" : "")}${s}`;
-        if (this.guimode === true) {
-            let l = document.getElementById("lblRunTime");
-            l.textContent = dur;
-        } else {
-            console.log("runtime: " + dur + " - eta: " + eta);
+            console.log(msg);
         }
     }
 }

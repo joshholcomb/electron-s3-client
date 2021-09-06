@@ -485,7 +485,6 @@ class BackupJob {
             let s3Date = new Date(s3LastModified);
             if (localDate > s3Date) {
                 s3Outdated = true;
-                console.log("\ts3 file is outdated");
             } 
         } catch (error) {
             this.consoleAppend("error checking dates for file [" + f + "] - assume outdated.");
@@ -495,9 +494,7 @@ class BackupJob {
         // if all of our tests passed, then do not upload
         if (objectExists === true && s3Outdated === false) {
             doUpload = false;
-        } else {
-            console.log("tests failed - uploading file");
-        }
+        } 
 
         return(doUpload);
     }
