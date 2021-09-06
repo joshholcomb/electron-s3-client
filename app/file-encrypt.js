@@ -59,7 +59,7 @@ class Encryptor {
             .pipe(writeStream);
     }
 
-    async encryptFileAndUploadStream(inFile, password, s3, bucket, key, kBps, startTime) {
+    async encryptFileAndUploadStream(inFile, password, s3, bucket, key, kBps, guimode) {
         try {
             let initVect = crypto.randomBytes(16);
             let k = this.getCipherKey(password);
@@ -71,7 +71,7 @@ class Encryptor {
             var {writeStream, promise} = this.uploadStream(s3, {Bucket: bucket, Key: key});
             let stats = fs.statSync(inFile);
             let fileSize = stats.size;
-            let pm = new ProgressMonitor(fileSize, inFile, true, startTime);
+            let pm = new ProgressMonitor(fileSize, inFile, guimode);
 
             await pipeline(readStream, 
                 gzip,

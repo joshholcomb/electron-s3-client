@@ -4,7 +4,7 @@
   "description": "electron based s3 client",
   "main": "main.js",
   "scripts": {
-    "start": "electron --enable-logging ."
+    "start": "electron --max-old-space-size=8192 --enable-logging ."
   },
   "author": "holcomb",
   "license": "ISC",

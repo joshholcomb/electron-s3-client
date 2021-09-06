@@ -61,12 +61,6 @@ function createWindow () {
             win.loadFile('app/config-settings.html');
           }
         },
-				{
-          label: 'clinerock',
-					click() {
-						shell.openExternal('http://www.clinerock.com')
-					}
-        },
         {type: 'separator'},
 				{
 					label: 'exit',
@@ -111,4 +105,8 @@ app.on('activate', () => {
 // code. You can also put them in separate files and require them here.
 ipc.handle('get-folder', () => {
   return dialog.showOpenDialog({ properties: ['openDirectory']});
+});
+
+ipc.handle('load-main', () => {
+  win.loadFile('app/index.html');
 });

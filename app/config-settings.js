@@ -8,8 +8,8 @@ const { data } = require('jquery');
 const path = require("path");                   
 const fs = require('fs');                     // for filesystem work
 const Store = require('./store');
-const remote = require('electron').remote;
-
+var electron = require('electron');
+var ipcRenderer = electron.ipcRenderer;
 
 const config = new Store({
     configName: 'default',
@@ -83,6 +83,6 @@ function saveConfigSettings() {
     alert("values set.");
 }
 
-function cancel() {
-    
+function backToMain() {
+    ipcRenderer.invoke('load-main');
 }

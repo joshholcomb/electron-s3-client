@@ -288,6 +288,10 @@ async function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+
+//
+//  fired by the backupButton function
+//
 function uploadFilesToS3V2(bucket, folderName) {
     backupJob.connectToS3();
 

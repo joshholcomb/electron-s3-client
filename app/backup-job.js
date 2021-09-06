@@ -141,12 +141,10 @@ class BackupJob {
     doBackup(localFolder, s3Bucket, s3Folder) {
         let promises = [];
         let limit = pLimit(parseInt(this.config.get("config.numThreads"), 10));
-        console.log("traversing directory [" + localFolder + "]");
+        this.consoleAppend("starting backup of local folder: [" + localFolder + "]");
+        this.consoleAppend("traversing directory [" + localFolder + "]");
         const files = this.listLocalFiles(localFolder);
-        if (this.guimode === true) {
-            this.consoleAppend("files found: [" + files.length + "]")
-        }
-        console.log("files found: [" + files.length + "]");
+        this.consoleAppend("files found: [" + files.length + "]");
         
         var fCount = 0;
         for (const f of files) {
@@ -159,10 +157,7 @@ class BackupJob {
             stats.startTime = Date.now();
 
             if (!this.runStatus) {
-                if (this.guimode === true) {
-                    this.consoleAppend("run status is false.");
-                }
-                console.log("run status is false.");
+                this.consoleAppend("run status is false.");
                 break;
             }
 
@@ -183,8 +178,6 @@ class BackupJob {
                     stats)
                 )
             );
-
-
         }
 
         (async () => {
@@ -343,7 +336,8 @@ class BackupJob {
                     try {
                         await encryptor.encryptFileAndUploadStream(f, 
                             encKey, this.s3, bucket, 
-                            uploadKey, throttleKBs, stats.startTime);
+                            uploadKey, throttleKBs, 
+                            this.guimode);
                         this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + uploadKey + "]");
                         break;
                     } catch (err) {
@@ -413,7 +407,7 @@ class BackupJob {
         const {writeStream, promise} = this.uploadStream({Bucket: bucket, Key: key});
         let stats = fs.statSync(f);
         let fileSize = stats.size;
-        let pm = new ProgressMonitor(fileSize, f, true);
+        let pm = new ProgressMonitor(fileSize, f, this.guimode);
 
         await pipeline(
             readStream,

@@ -1,13 +1,12 @@
 const { Transform } = require('stream');
 
 class ProgressMonitor extends Transform {
-    constructor(totalBytes, file, guimode, startTime, opts) {
+    constructor(totalBytes, file, guimode, opts) {
         super(opts);
         this.totalBytes = totalBytes;
         this.processedBytes = 0;
         this.file = file;
         this.guimode = guimode;
-        this.startTime = startTime;
     }
 
     _transform(chunk, encoding, cb) {
