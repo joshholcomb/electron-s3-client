@@ -161,7 +161,7 @@ function clearConsoleButton() {
 // invoked when user clicks the restore button
 //
 function restoreButton() {
-
+    backupJob.setRunStatus(true);
     var dirField = document.getElementById("txtLocalFolder");
     if (dirField.value.length == 0) {
         alert("local directory not selected..");

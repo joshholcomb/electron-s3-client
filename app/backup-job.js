@@ -311,10 +311,13 @@ class BackupJob {
     // process a single file for upload
     //
     async processFileForUpload(f, bucket, key, stats) {
-
         if (this.runStatus === false) {
             return;
         }
+
+        this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - processing file: " + f);
+
+
         // analyze the file to see if we need to upload
         // does files exist on s3 bucket.  if so, is it outdated?
         let doUpload = await this.analyzeFile(f, key, bucket);
@@ -332,7 +335,7 @@ class BackupJob {
             if (this.encrypt === true) {
                 let uploadKey = key + ".enc";
 
-                // now encrypt
+                // now encrypt and upload
                 let encryptor = new Encryptor();
                 let encKey = this.config.get("encryption.passphrase");
                 let i = 0;
@@ -358,7 +361,7 @@ class BackupJob {
                 while (i < 3) {
                     try {
                         await this.uploadFileAsStream(f, bucket, key, throttleKBs);
-                        this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + key + "]");
+                        this.consoleAppend("uploaded [" + f + "] to [" + key + "]");
                         break;
                     } catch (err) {
                         this.consoleAppend("ERROR - file: " + f + " error: " + err);
@@ -387,6 +390,10 @@ class BackupJob {
             this.consoleAppend("rate per min: " + rate);
             let eta = Math.round((stats.fCount - stats.fCounter) / rate);
             this.updateRuntime(m,s, eta);
+
+            // print memory usage
+            const used = process.memoryUsage().heapUsed / 1024 / 1024;
+            this.consoleAppend("memory usage: " + Math.round(used * 100) / 100 + "MB");
 
             // see if we have a stop file 
             try {
@@ -506,7 +513,7 @@ class BackupJob {
         let writeFile = key.substring(key.lastIndexOf("/") + 1);
         writeDir = writeDir.replace(/\//g, '\\');
         let fullPath = writeDir + "\\" + writeFile;
-        console.log("[" + stats.fCounter + " - " + stats.fCount + "] - downloading object: " + key);
+        this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - downloading object: " + key);
     
         // make sure target directory exists on local folder
         fs.mkdirSync(writeDir, { recursive: true});
@@ -518,7 +525,7 @@ class BackupJob {
                 fullPath = fullPath.substring(0, fullPath.length - 4);
 
                 if (fs.existsSync(fullPath)) {
-                    console.log("file already exists on restore point - skipping");
+                    this.consoleAppend("file already exists on restore point - skipping.");
                     return;
                 }
 
@@ -584,7 +591,7 @@ class BackupJob {
 
             // print mem usage
             const used = process.memoryUsage().heapUsed / 1024 / 1024;
-            console.log("memory usage: " + Math.round(used * 100) / 100 + "MB");
+            this.consoleAppend("memory usage: " + Math.round(used * 100) / 100 + "MB");
         } 
     }
 
