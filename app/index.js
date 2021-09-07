@@ -219,6 +219,12 @@ function consoleAppend(msg) {
 //
 function awsConnect() {
     
+    if (!fs.existsSync('config/my-ca-cert.crt')) {
+        // no cert file found
+        consoleAppend("no cert file found in config directory.")
+        process.exit(1);
+    }
+    
     try {
         fileContents = fs.readFileSync('config/my-ca-cert.crt');
     } catch (err) {
