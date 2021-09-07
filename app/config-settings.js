@@ -29,6 +29,9 @@ const config = new Store({
     }
   });
 
+document.getElementById("saveButton").addEventListener("click", saveConfigSettings);
+document.getElementById("backButton").addEventListener("click", backToMain);
+
 //
 // set input text values on default
 //

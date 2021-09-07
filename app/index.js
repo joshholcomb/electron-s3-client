@@ -3,10 +3,9 @@
 //
 // global variables
 //
-const { data } = require('jquery');
+//const { data } = require('jquery');
 const path = require("path");                   
 const fs = require('fs');                     // for filesystem work
-var mkdirp = require('mkdirp');
 const Encryptor = require('./file-encrypt');    // file encryption
 const Store = require('./store');
 var electron = require('electron');
@@ -57,6 +56,16 @@ lblSecretAccessKey.textContent = pass;
 let defaultBucket = document.getElementById("txtBucket");
 defaultBucket.value = config.get("s3.defaultBucket");
 
+// add listenerEvents for buttons
+document.getElementById("backupButton").addEventListener("click", backupButton);
+document.getElementById("restoreButton").addEventListener("click", restoreButton);
+document.getElementById("decryptButton").addEventListener("click", decryptButton);
+document.getElementById("lsBucketsButton").addEventListener("click", lsBucketsButton);
+document.getElementById("lsFoldersButton").addEventListener("click", lsObjectsButton);
+document.getElementById("clearConsoleButton").addEventListener("click", clearConsoleButton);
+document.getElementById("stopButton").addEventListener("click", stopButton);
+
+
 // update folder information
 // fires from html when local directory value changes
 const updateFolder = async () => {
@@ -75,6 +84,8 @@ const updateFolder = async () => {
     }
     
 }
+
+document.getElementById("selectFolderButton").addEventListener("click", updateFolder);
 
 // make backup job global
 var certFile = "./config/my-ca-cert.crt";
@@ -261,6 +272,7 @@ function listBuckets() {
       if (err) {
           console.log(err, err.stack); // an error occurred
       } else {
+        consoleAppend("===results found [" + data.Buckets.length + "]===");
         data.Buckets.forEach(function(i) {
             consoleAppend("bucket: [" + i.Name + "]");
         });

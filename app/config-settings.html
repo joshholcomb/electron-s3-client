@@ -36,11 +36,20 @@
         </div>
 
         <div class="row row-relative">
-            <div class="col-sm-2">
-                <p><b>--s3 settings</b></p>
+            <div class="col-sm-4">
+                <p><b>--s3 settings (use region or endpoint)</b></p>
             </div>
         </div>
         
+        <div class="row row-relative">
+            <div class="col-md-4 small">
+              <label for="txtRegion">aws region:</label>
+            </div>
+            <div class="col-md-4 small">
+                <input id="txtRegion" type="text" class="input-sm w-50"/>
+            </div>
+        </div>
+
         <div class="row row-relative">
             <div class="col-md-4 small">
               <label for="txtEndpoint">aws endpoint:</label>
@@ -138,8 +147,8 @@
 
         <div class="row row-relative">
             <div class="col-md-4 small">
-                <button type="submit" class="btn-primary btn-sm" onclick=saveConfigSettings()>save</button>
-                <button type="back" class="btn-primary btn-sm" onclick=backToMain()>back</button>
+                <button id="saveButton" type="submit" class="btn-primary btn-sm">save</button>
+                <button id="backButton" type="submit" class="btn-primary btn-sm">back</button>
             </div>
         </div>
 

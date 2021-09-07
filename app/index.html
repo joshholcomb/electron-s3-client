@@ -3,7 +3,7 @@
 
   <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self'">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta name="description" content="">
     <meta name="author" content="">
@@ -39,7 +39,7 @@
             <div class="col-md-4 small">
               <label for="srcFolder">local folder:</label>
               <input type="text" class="input-sm w-75" id="txtLocalFolder"/>
-              <button style="display:block;width:110px; height:25px;" onclick="updateFolder()">select folder</button>
+              <button id="selectFolderButton" style="display:block;width:110px; height:25px;">select folder</button>
               <br>
             </div>
             <div class="col-md-4 small col-border">
@@ -66,15 +66,15 @@
        
         <div class="row row-relative">
           <div class="col-md-4 small">
-            <button type="submit" class="btn-primary btn-sm" onclick=backupButton()>backup</button>
-            <button type="submit" class="btn-primary btn-sm" onclick=restoreButton()>restore</button>
-            <button type="submit" class="btn-primary btn-sm" onclick=decryptButton()>decrypt</button>
+            <button id="backupButton" type="submit" class="btn-primary btn-sm">backup</button>
+            <button id="restoreButton" type="submit" class="btn-primary btn-sm">restore</button>
+            <button id="decryptButton" type="submit" class="btn-primary btn-sm">decrypt</button>
           </div>
           <div class="col-md-4 small">
-            <button type="submit" class="btn-primary btn-sm" onclick=lsBucketsButton()>list buckets</button>
-            <button type="submit" class="btn-primary btn-sm" onclick=lsObjectsButton()>list folders</button>
-            <button type="submit" class="btn-primary btn-sm" onclick=clearConsoleButton()>clear console</button>
-            <button type="submit" class="btn-primary btn-sm" onclick=stopButton()>stop</button>
+            <button id="lsBucketsButton" type="submit" class="btn-primary btn-sm">list buckets</button>
+            <button id="lsFoldersButton" type="submit" class="btn-primary btn-sm">list folders</button>
+            <button id="clearConsoleButton" type="submit" class="btn-primary btn-sm">clear console</button>
+            <button id="stopButton" type="submit" class="btn-primary btn-sm">stop</button>
           </div>
           <div class="col-md-4 small">
             <input type="checkbox" class="form-check-input" id="encryptCheckBox"/>
