@@ -6,8 +6,9 @@ const Encryptor = require('./file-encrypt');    // file encryption
 const pLimit = require('p-limit');
 var https = require('https');
 const stream = require('stream');
-const pipeline = require('stream').promises;
 const Throttle = require('throttle-stream');
+const ProgressMonitor = require('./progress-monitor');
+const pipeline = require('util').promisify(require("stream").pipeline);
 
 
 /*
@@ -186,6 +187,17 @@ class BackupJob {
 
     }
 
+    isS3ObjectLocal(key, localFiles) {
+        let found = false;
+        for (let f of localFiles) {
+            let fn = f.replace(/\\/g, '/'); 
+            if (fn.includes(key)) {
+                found = true;
+                break;
+            }
+        }
+        return found;
+    }
 
     // in case you have a local folder with encrypted data that needs decrypted
     async decryptFolder(localDir) {
@@ -234,6 +246,43 @@ class BackupJob {
         }
     }
 
+    // 
+    // check all s3 keys to make sure there is a local file
+    // if no local file - delete the key from s3
+    //
+    async doPruneExtraS3Objects(localFolder, bucket, s3Folder) {
+        var params = {
+            Bucket: bucket,
+            Prefix: s3Folder
+        };
+
+        let allKeys = [];
+        allKeys = await this.listS3Keys(params, allKeys);
+        this.consoleAppend("s3 objects found: " + allKeys.length);
+        const files = this.listLocalFiles(localFolder);
+        this.consoleAppend("local files found: " + files.length);
+        let i = 0;
+        for (let k of allKeys) {
+            i++;
+            if (this.runStatus === false) {
+                break;
+            }
+
+            if (i % 100 === 0) {
+                this.consoleAppend("[" + i + "] of [" + allKeys.length + "] - checking: " + k);
+            } 
+
+            if (!this.isS3ObjectLocal(k, files) === true) {
+                this.consoleAppend("[" + i + "] of [" + allKeys.length + "] did not find local file for key: [" + k + "] - deleting from s3");
+                let delResult = await this.s3.deleteObject({Bucket: bucket, Key: k}).promise();
+                if (delResult.err) {
+                    this.consoleAppend("error deleting object: " + delResult.err);
+                }
+            }
+        }
+
+        this.consoleAppend("finished.");
+    }
 
      // restore job
     async doRestore(localFolder, bucket, s3Folder) {

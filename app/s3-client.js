@@ -38,6 +38,7 @@ const argv = yargs
     .command('backup', 'backs up specified folder')
     .command('listfolders', 'lists the top level folders in this bucket')
     .command('restore', 'restore data to local directory')
+    .command('pruneBackup', 'prune extra s3 objects from backup')
     .command('config', 'command to configure the app', {
         threads: {
             describe: 'number of threads to run',
@@ -158,6 +159,29 @@ async function main() {
         }
 
         backupJob.doBackup(argv.localdir, argv.s3bucket, argv.s3folder);
+    }
+
+    // pruneExtraS3
+    if (argv.pruneBackup === true) {
+        if (!argv.s3bucket) {
+            console.log("required option s3 bucket");
+            process.exit(1);
+        }
+
+        if (!argv.localdir) {
+            console.log("required option localdir");
+            process.exit(1);
+        }
+
+        if (!argv.s3folder) {
+            console.log("required option s3folder");
+            process.exit(1);
+        }
+
+        let backupJob = new BackupJob(config, certFile);
+        backupJob.connectToS3();
+
+        backupJob.doPruneExtraS3Objects(argv.localdir, argv.s3bucket, argv.s3folder);
     }
 
     // listfolders job

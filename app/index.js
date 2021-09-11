@@ -64,6 +64,7 @@ document.getElementById("lsBucketsButton").addEventListener("click", lsBucketsBu
 document.getElementById("lsFoldersButton").addEventListener("click", lsObjectsButton);
 document.getElementById("clearConsoleButton").addEventListener("click", clearConsoleButton);
 document.getElementById("stopButton").addEventListener("click", stopButton);
+document.getElementById("pruneButton").addEventListener("click", pruneButton);
 
 
 // update folder information
@@ -84,7 +85,6 @@ const updateFolder = async () => {
     }
     
 }
-
 document.getElementById("selectFolderButton").addEventListener("click", updateFolder);
 
 // make backup job global
@@ -149,6 +149,31 @@ function decryptButton() {
     backupJob.decryptFolder(localDir);
 }
 
+function pruneButton() {
+    let localDir = document.getElementById("txtLocalFolder").value;
+    if (!localDir) {
+        alert("You must select the directory to decrypt.");
+        return;
+    }
+
+    var bucket = document.getElementById("txtBucket").value;
+    if (bucket.length == 0) {
+        alert("bucket not entered...");
+        return;
+    }
+   
+    var s3Folder = document.getElementById("txtS3Folder").value;
+    if (s3Folder.length == 0) {
+        alert("bucket or src folder not entered.");
+        return;
+    }
+
+    backupJob.connectToS3();
+    backupJob.setRunStatus(true);
+    backupJob.setGuiMode(true);
+    backupJob.doPruneExtraS3Objects(localDir, bucket, s3Folder);
+
+}
 
 //
 // invoked when user clicks the stop button

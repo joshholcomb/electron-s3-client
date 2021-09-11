@@ -7,7 +7,7 @@ const RemoveInitVect = require('./remove-init-vect.js');
 const ProgressMonitor = require('./progress-monitor');
 const stream = require('stream');
 const Throttle = require('throttle-stream');
-const pipeline = require('util').promisify(require("stream").pipeline)
+const pipeline = require('util').promisify(require("stream").pipeline);
 
 
 class Encryptor {
