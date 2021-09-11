@@ -41,7 +41,8 @@ const config = new Store({
 
 
 // initial display settings
-console.log("displaying s3 values.");
+let lblS3Region = document.getElementById("lblS3Region");
+lblS3Region.textContent = config.get("s3.awsRegion");
 let lblEndpoint = document.getElementById("lblS3Endpoint");
 lblEndpoint.textContent = config.get("s3.endpoint");
 let lblAccessKey = document.getElementById("lblS3AccessKey");

@@ -37,30 +37,13 @@ class BackupJob {
     }
 
     connectToS3() {
-        let fileContents = "";
-        try {
-            fileContents = fs.readFileSync(this.certFile);
-        } catch (err) {
-            console.log(err.stack);
-        }
-    
-        var customAgent = new https.Agent({
-            ca: fileContents,
-            keepAlive: true,
-            maxSockets: 5
-        });
-        try {
-            AWS.config.update({
-                httpOptions: { agent: customAgent}
-            });
-        } catch (err) {
-            console.log(err.stack);
-        }
+        
     
         // get access creds from config
         var accessKey = this.config.get("s3.accessKey");
         var secretAccessKey = this.config.get("s3.secretAccessKey");
         var endpoint = this.config.get("s3.endpoint");
+        var region = this.config.get("s3.awsRegion");
     
         // set AWS timeout
         AWS.config.update({
@@ -69,16 +52,48 @@ class BackupJob {
                 timeout: 600000,
                 connectTimeout: 5000,
             },
-        })
-    
-        var s3  = new AWS.S3({
+        });
+
+        var s3 = null;
+        if (region) {
+            AWS.config.update({region: region});
+            s3  = new AWS.S3({
+                accessKeyId: accessKey,
+                secretAccessKey: secretAccessKey,
+                s3ForcePathStyle: true,
+                signatureVersion: 'v4'
+            });
+        } else {
+            let fileContents = "";
+            try {
+                fileContents = fs.readFileSync(this.certFile);
+            } catch (err) {
+                console.log(err.stack);
+            }
+        
+            var customAgent = new https.Agent({
+                ca: fileContents,
+                keepAlive: true,
+                maxSockets: 5
+            });
+            try {
+                AWS.config.update({
+                    httpOptions: { agent: customAgent}
+                });
+            } catch (err) {
+                console.log(err.stack);
+            }
+            
+            s3  = new AWS.S3({
                 accessKeyId: accessKey,
                 secretAccessKey: secretAccessKey,
                 endpoint: endpoint,
                 s3ForcePathStyle: true, // needed with minio?
                 signatureVersion: 'v4'
-        });
-        console.log("connected to endpoint: " + endpoint);
+            });
+        }
+
+        console.log("connected to s3");
     
         this.s3 = s3;
     }
@@ -187,6 +202,7 @@ class BackupJob {
 
     }
 
+    // check to see if a s3 key is present on local filesystem
     isS3ObjectLocal(key, localFiles) {
         let found = false;
         for (let f of localFiles) {
@@ -328,6 +344,7 @@ class BackupJob {
         });
     }
 
+    // list the top level folders in a bucket
     async listBucketFolders(bucket) {
         let folders = [];
         var params = {
@@ -450,6 +467,7 @@ class BackupJob {
         }
     }
 
+    // upload a file via streams
     async uploadFileAsStream (f, bucket, key, kBps) {
         let readStream = fs.createReadStream(f);
         let throttle = new Throttle({ bytes: kBps * 1024, interval: 1000 });
@@ -466,6 +484,7 @@ class BackupJob {
         );
     }
 
+    // utility function to create an upload stream
     uploadStream = ({ Bucket, Key }) => {
         const pass = new stream.PassThrough();
         return {

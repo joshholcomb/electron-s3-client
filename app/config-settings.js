@@ -36,6 +36,8 @@ document.getElementById("backButton").addEventListener("click", backToMain);
 // set input text values on default
 //
 try {
+    var awsRegion = document.getElementById("txtRegion");
+    awsRegion.value = config.get("s3.awsRegion");
     var endpoint = document.getElementById("txtEndpoint");
     endpoint.value = config.get("s3.endpoint");
     var accessKey = document.getElementById("txtAccessKey");
@@ -63,6 +65,8 @@ try {
 
 function saveConfigSettings() {
     console.log("saving s3 properties");
+    let region = document.getElementById("txtRegion").value;
+    config.set("s3.awsRegion", region);
     let endpoint = document.getElementById("txtEndpoint").value;
     config.set("s3.endpoint", endpoint);
     let accessKey = document.getElementById("txtAccessKey").value;
