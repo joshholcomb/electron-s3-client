@@ -113,6 +113,10 @@ class BackupJob {
 
     addErrorFile(f) {
         this.errorFiles.push(f);
+        if (this.errorFiles.length > 100) {
+            this.consoleAppend("too many errors - exit");
+            process.exit(1);
+        }
     }
 
     //
@@ -374,7 +378,7 @@ class BackupJob {
             return;
         }
 
-        this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - processing file: " + f);
+        //this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - processing file: " + f);
 
 
         // analyze the file to see if we need to upload
