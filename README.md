@@ -10,7 +10,15 @@ Electron based s3 client to backup files from local machine to a configured s3 b
 
 
 # configuration
-conf directory will hold certificate and json config file.  This file will be created after first run with user settings.
+conf directory will hold certificate and json config file.  
+
+## certificates
+When you connect to a minio server using your own certificate (openssl) you will need to provide
+your ca certificate to connect using the s3-client.  This is not required when connecting to aws.s
+
+## config file
+This file will be created after first run with user settings.  On first run, click on file->config settings to configure
+your client to connect to your s3 endpoint.
 
 # gui and cli
 to run the gui
