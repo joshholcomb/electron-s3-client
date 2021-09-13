@@ -113,6 +113,9 @@ class BackupJob {
 
     addErrorFile(f) {
         this.errorFiles.push(f);
+
+        this.consoleAppend("error count: [" + this.errorFiles.length + "] - max 100");
+
         if (this.errorFiles.length > 100) {
             this.consoleAppend("too many errors - exit");
             process.exit(1);
@@ -158,12 +161,13 @@ class BackupJob {
     }
 
     // backup a specified folder to a specified s3 target
-    doBackup(localFolder, s3Bucket, s3Folder) {
+    doBackup(localFolder, s3Bucket, s3Folder, excludeDirs) {
         let promises = [];
         let limit = pLimit(parseInt(this.config.get("config.numThreads"), 10));
         this.consoleAppend("starting backup of local folder: [" + localFolder + "]");
         this.consoleAppend("traversing directory [" + localFolder + "]");
-        const files = this.listLocalFiles(localFolder);
+
+        const files = this.listLocalFiles(localFolder, [], excludeDirs);
         this.consoleAppend("files found: [" + files.length + "]");
         
         var fCount = 0;
@@ -200,9 +204,14 @@ class BackupJob {
             );
         }
 
+        Promise.all(promises).then(() => {
+            this.consoleAppend("backup job finished.");
+        });
+        /*
         (async () => {
             const result = await Promise.all(promises);
         });
+        */
 
     }
 
@@ -688,7 +697,13 @@ class BackupJob {
         });
     }
 
-    listLocalFiles(dirPath, arrayOfFiles) {
+
+    //
+    // get a list of the local files that we want to work with
+    // exclude dirs will be a list of top level directories that we want
+    // to exclude from the backup
+    //
+    listLocalFiles(dirPath, arrayOfFiles, excludeDirs) {
         var self = this;
         let files = [];
 
@@ -698,12 +713,28 @@ class BackupJob {
             myConsole.log(err.stack);
         }
       
-        arrayOfFiles = arrayOfFiles || []
+        var self = this;
+
+        arrayOfFiles = arrayOfFiles || [];
       
         files.forEach(function(file) {
             let abs = path.join(dirPath, file);
             if (fs.statSync(abs).isDirectory()) {
-                arrayOfFiles = self.listLocalFiles(abs, arrayOfFiles);
+                let excludeThis = false;
+
+                if (excludeDirs) {
+                    for (let d of excludeDirs.split(',')) {
+                        if (abs.includes(d)) {
+                            excludeThis = true;
+                            self.consoleAppend("excluding directory: " + abs);
+                            break;
+                        }
+                    }
+                }
+
+                if (excludeThis === false) {
+                    arrayOfFiles = self.listLocalFiles(abs, arrayOfFiles);
+                }
             } else {
                 arrayOfFiles.push(abs)
             }

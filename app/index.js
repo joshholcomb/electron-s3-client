@@ -120,24 +120,20 @@ function backupButton() {
     backupJob.setRunStatus(true);
 
     var dirField = document.getElementById("txtLocalFolder");
-    if (dirField.value.length == 0) {
+    if (dirField.value.length === 0) {
         alert("local directory not selected..");
         return;
     }
     var dir = dirField.value;
 
     var bucket = document.getElementById("txtBucket");
-    if (bucket.value.length == 0) {
+    if (bucket.value.length === 0) {
         alert("bucket not entered...");
         return;
     }
     console.log("bucket entered: [" + bucket.value + "]");
-    if (bucket.value.length == 0) {
-        alert("bucket or src folder not entered.");
-        return;
-    } else {
-       uploadFilesToS3V2(bucket.value, dir);
-    }
+   
+    uploadFilesToS3V2(bucket.value, dir);
 }
 
 function decryptButton() {
@@ -345,8 +341,9 @@ function uploadFilesToS3V2(bucket, folderName) {
         backupJob.setEncryption(true);
     }
     let s3Folder = document.getElementById("txtS3Folder").value;
+    let excludeDirs = document.getElementById("txtExcludeDirs").value;
     backupJob.setGuiMode(true);
-    backupJob.doBackup(folderName, bucket, s3Folder);
+    backupJob.doBackup(folderName, bucket, s3Folder, excludeDirs);
 }
 
 

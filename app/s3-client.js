@@ -106,6 +106,10 @@ const argv = yargs
         description: 'flag to request encryption',
         type: 'boolean',
     })
+    .option('excludedirs', {
+        description: 'comma separated list of top level directories to exclude from backup',
+        type: 'text'
+    })
     .argv;
 
 
@@ -158,7 +162,7 @@ async function main() {
             backupJob.setEncryption(true);
         }
 
-        backupJob.doBackup(argv.localdir, argv.s3bucket, argv.s3folder);
+        backupJob.doBackup(argv.localdir, argv.s3bucket, argv.s3folder, argv.excludedirs);
     }
 
     // pruneExtraS3

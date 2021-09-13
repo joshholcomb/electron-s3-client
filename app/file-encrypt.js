@@ -68,10 +68,15 @@ class Encryptor {
             let cipher = crypto.createCipheriv("aes-256-cbc", k, initVect);
             let appendInitVect = new AppendInitVect(initVect);
             let throttle = new Throttle({ bytes: kBps * 1024, interval: 1000 });
-            var {writeStream, promise} = this.uploadStream(s3, {Bucket: bucket, Key: key});
             let stats = fs.statSync(inFile);
             let fileSize = stats.size;
             let pm = new ProgressMonitor(fileSize, inFile, guimode);
+            var ws = new stream.PassThrough();
+            s3.upload({Bucket: bucket, Key: key, Body: ws }).promise();
+
+            ws.on('error', (err) => {
+                console.log("writestream error: " + err);
+            });
 
             await pipeline(readStream, 
                 gzip,
@@ -79,19 +84,11 @@ class Encryptor {
                 appendInitVect,
                 throttle,
                 pm,
-                writeStream);
+                ws);
 
         } catch (err) {
             console.log("error encrypting and uploading file: " + err);
         }
-    }
-
-    uploadStream = (s3, { Bucket, Key }) => {
-        const pass = new stream.PassThrough();
-        return {
-            writeStream: pass,
-            promise: s3.upload({ Bucket, Key, Body: pass }).promise(),
-        };
     }
 
     //
