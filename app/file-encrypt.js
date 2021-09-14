@@ -72,10 +72,14 @@ class Encryptor {
             let fileSize = stats.size;
             let pm = new ProgressMonitor(fileSize, inFile, guimode);
             var ws = new stream.PassThrough();
-            s3.upload({Bucket: bucket, Key: key, Body: ws }).promise();
+            let p = s3.upload({Bucket: bucket, Key: key, Body: ws }).promise();
 
             ws.on('error', (err) => {
                 console.log("writestream error: " + err);
+            });
+
+            ws.on('finish', () => {
+                console.log("writestream finished");
             });
 
             await pipeline(readStream, 
@@ -85,6 +89,13 @@ class Encryptor {
                 throttle,
                 pm,
                 ws);
+
+            p.then(() => {
+                console.log("upload completed successfully");
+            }).catch((err) => {
+                console.log("error uploading file: " + err);
+            });
+            
 
         } catch (err) {
             console.log("error encrypting and uploading file: " + err);

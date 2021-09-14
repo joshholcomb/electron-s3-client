@@ -66,9 +66,14 @@ try {
 function saveConfigSettings() {
     console.log("saving s3 properties");
     let region = document.getElementById("txtRegion").value;
-    config.set("s3.awsRegion", region);
+    if (region) {
+        config.set("s3.awsRegion", region);
+    }
+
     let endpoint = document.getElementById("txtEndpoint").value;
-    config.set("s3.endpoint", endpoint);
+    if (endpoint) {
+        config.set("s3.endpoint", endpoint);
+    }
     let accessKey = document.getElementById("txtAccessKey").value;
     config.set("s3.accessKey", accessKey);
     let secretAccessKey = document.getElementById("txtSecretAccessKey").value;

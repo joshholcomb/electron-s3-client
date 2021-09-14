@@ -36,24 +36,31 @@ class BackupJob {
         this.errorFiles = [];
     }
 
+    //
+    // establish connection to aws s3 or minio
+    // depends on config values (aws s3 will take priority if present)
+    //
     connectToS3() {
         
-    
         // get access creds from config
         var accessKey = this.config.get("s3.accessKey");
         var secretAccessKey = this.config.get("s3.secretAccessKey");
         var endpoint = this.config.get("s3.endpoint");
         var region = this.config.get("s3.awsRegion");
     
+        let timeoutMin = 240;
+        let to = (timeoutMin * 60) * 1000;
+
         // set AWS timeout
         AWS.config.update({
             maxRetries: 2,
             httpOptions: {
-                timeout: 600000,
-                connectTimeout: 5000,
+                timeout: to,
+                connectTimeout: 20000,
             },
         });
 
+        // if region is specified, then use it - else use the endpoint
         var s3 = null;
         if (region) {
             AWS.config.update({region: region});
@@ -484,26 +491,24 @@ class BackupJob {
     async uploadFileAsStream (f, bucket, key, kBps) {
         let readStream = fs.createReadStream(f);
         let throttle = new Throttle({ bytes: kBps * 1024, interval: 1000 });
-        const {writeStream, promise} = this.uploadStream({Bucket: bucket, Key: key});
         let stats = fs.statSync(f);
         let fileSize = stats.size;
         let pm = new ProgressMonitor(fileSize, f, this.guimode);
+        let ws = new stream.PassThrough();
+        let promise = this.s3.upload({ Bucket: bucket, Key: key, Body: ws }).promise();
 
         await pipeline(
             readStream,
             throttle,
             pm,
-            writeStream
+            ws
         );
-    }
 
-    // utility function to create an upload stream
-    uploadStream = ({ Bucket, Key }) => {
-        const pass = new stream.PassThrough();
-        return {
-            writeStream: pass,
-            promise: this.s3.upload({ Bucket, Key, Body: pass }).promise(),
-        };
+        promise.then(() => {
+            console.log("upload complete");
+        }).catch((err) => {
+            console.log("error uploading file: " + err);
+        });
     }
 
     //
@@ -678,24 +683,6 @@ class BackupJob {
     async delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
-    
-    async downloadObject(bucket, k, writeFile) {
-        return new Promise((resolve, reject) => {
-            let params = { Bucket: bucket, Key: k };
-            let writeStream = fs.createWriteStream(writeFile);
-            let readStream = this.s3.getObject(params).createReadStream();
-            readStream.pipe(writeStream);
-    
-            readStream.on('error', function(err) {
-                reject(err);
-            });
-            
-            readStream.on('close', function() {
-                resolve();
-            });
-    
-        });
-    }
 
 
     //
@@ -714,9 +701,8 @@ class BackupJob {
         }
       
         var self = this;
-
         arrayOfFiles = arrayOfFiles || [];
-      
+
         files.forEach(function(file) {
             let abs = path.join(dirPath, file);
             if (fs.statSync(abs).isDirectory()) {
@@ -724,7 +710,7 @@ class BackupJob {
 
                 if (excludeDirs) {
                     for (let d of excludeDirs.split(',')) {
-                        if (abs.includes(d)) {
+                        if (abs.toLowerCase().includes(d.toLowerCase())) {
                             excludeThis = true;
                             self.consoleAppend("excluding directory: " + abs);
                             break;
