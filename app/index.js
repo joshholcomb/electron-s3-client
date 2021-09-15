@@ -56,6 +56,10 @@ for (i=0; i < length; i++) {
 lblSecretAccessKey.textContent = pass;
 let defaultBucket = document.getElementById("txtBucket");
 defaultBucket.value = config.get("s3.defaultBucket");
+let threads = document.getElementById("txtNumThreads");
+threads.value = config.get("config.numThreads");
+let kbps = document.getElementById("txtThreadKbps");
+kbps.value = config.get("config.bandwidth");
 
 // add listenerEvents for buttons
 document.getElementById("backupButton").addEventListener("click", backupButton);
@@ -342,8 +346,10 @@ function uploadFilesToS3V2(bucket, folderName) {
     }
     let s3Folder = document.getElementById("txtS3Folder").value;
     let excludeDirs = document.getElementById("txtExcludeDirs").value;
+    let threads = document.getElementById("txtNumThreads").value;
+    let kbps = document.getElementById("txtThreadKbps").value;
     backupJob.setGuiMode(true);
-    backupJob.doBackup(folderName, bucket, s3Folder, excludeDirs);
+    backupJob.doBackup(folderName, bucket, s3Folder, excludeDirs, threads, kbps);
 }
 
 

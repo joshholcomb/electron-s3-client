@@ -25,7 +25,9 @@ class BackupJob {
     encrypt = false;    // flag to encrypt data before uploading
     runStatus = true;   // toggle for stopping a long running job
     guimode = false;    // set if running in gui mode (log status to electron)
-    errorFiles;
+    errorFiles;         // keep a running list of errors
+    numThreads = 1;     // number of threads for this job
+    threadKbps = 200;   // throttle in KBps per thread
 
     // private variables
     s3;
@@ -168,14 +170,25 @@ class BackupJob {
     }
 
     // backup a specified folder to a specified s3 target
-    doBackup(localFolder, s3Bucket, s3Folder, excludeDirs) {
+    doBackup(localFolder, s3Bucket, s3Folder, excludeDirs, threads, threadKbps) {
         let promises = [];
-        let limit = pLimit(parseInt(this.config.get("config.numThreads"), 10));
+        let limit;
+        if (threads) {
+            this.consoleAppend("setting threads: " + threads);
+            limit = pLimit(parseInt(threads, 10));
+        } else {
+            this.consoleAppend("setting threads to config value");
+            limit = pLimit(parseInt(this.config.get("config.numThreads"), 10));
+        }
         this.consoleAppend("starting backup of local folder: [" + localFolder + "]");
         this.consoleAppend("traversing directory [" + localFolder + "]");
 
         const files = this.listLocalFiles(localFolder, [], excludeDirs);
         this.consoleAppend("files found: [" + files.length + "]");
+
+        if (!threadKbps) {
+            threadKbps = parseInt(this.config.get("config.bandwidth"));
+        }
         
         var fCount = 0;
         for (const f of files) {
@@ -206,7 +219,8 @@ class BackupJob {
                     f, 
                     s3Bucket, 
                     key,
-                    stats)
+                    stats,
+                    threadKbps)
                 )
             );
         }
@@ -321,9 +335,19 @@ class BackupJob {
     }
 
      // restore job
-    async doRestore(localFolder, bucket, s3Folder) {
+    async doRestore(localFolder, bucket, s3Folder, threads, threadKbps) {
         let promises = [];
-        let limit = pLimit(parseInt(this.config.get("config.numThreads")));
+        let limit;
+        if (threads) {
+            this.consoleAppend("setting threads: " + threads);
+            limit = pLimit(parseInt(threads, 10));
+        } else {
+            limit = pLimit(parseInt(this.config.get("config.numThreads"), 10));
+        }
+
+        if (!threadKbps) {
+            threadKbps = parseInt(this.config.get("config.bandwidth"), 10);
+        }
 
         var params = {
             Bucket: bucket,
@@ -353,7 +377,8 @@ class BackupJob {
                     localFolder,
                     bucket,
                     k,
-                    stats)
+                    stats,
+                    threadKbps)
                 )
             );
         }
@@ -389,7 +414,7 @@ class BackupJob {
     //
     // process a single file for upload
     //
-    async processFileForUpload(f, bucket, key, stats) {
+    async processFileForUpload(f, bucket, key, stats, threadKbps) {
         if (this.runStatus === false) {
             return;
         }
@@ -405,7 +430,11 @@ class BackupJob {
         if (doUpload === true) {
             let throttleKBs = 500;
             try {
-                throttleKBs = parseInt(this.config.get("config.bandwidth"));
+                if (threadKbps) {
+                    throttleKBs = parseInt(threadKbps);
+                } else {
+                    throttleKBs = parseInt(config.get("config.bandwidth"));
+                }
             } catch (err) {
                 this.consoleAppend("throttle not set - using default of 500 KBps per second");
             }
@@ -505,7 +534,7 @@ class BackupJob {
         );
 
         promise.then(() => {
-            console.log("upload complete");
+            //console.log("upload complete");
         }).catch((err) => {
             console.log("error uploading file: " + err);
         });
@@ -531,25 +560,11 @@ class BackupJob {
         }
 
         let s3LastModified = null;
-        let i = 0;
         let data = "";
-        while (i < 3) {
-            try {
-                data = await this.s3.headObject(params).promise();
-                break;
-            } catch (err) {
-                if (err.code === 'NotFound') {
-                    i = 4;
-                    return doUpload;
-                } else {
-                    this.consoleAppend("try [" + i + "] - headObject error - file: " + key + " error : " + err);
-                    await this.delay(2500);
-                    i++;
-                    if (i >= 3) {
-                        return doUpload;
-                    }
-                }
-            }
+        try {
+            data = await this.s3.headObject(params).promise();
+        } catch (err) {
+            return doUpload;
         }
 
         objectExists = true;
@@ -584,10 +599,14 @@ class BackupJob {
     //
     // process a single file for download
     //
-    async processFileForDownload(localDir, bucket, key, stats) {
+    async processFileForDownload(localDir, bucket, key, stats, threadKbps) {
 
         if (this.runStatus === false) {
             return;
+        }
+
+        if (!threadKbps) {
+            threadKbps = parseInt(config.get("config.bandwidth"), 10);
         }
 
         // setup the directory for download
@@ -615,7 +634,7 @@ class BackupJob {
                     bucket, key, 
                     this.config.get("encryption.passphrase"), 
                     fullPath,
-                    this.config.get("config.bandwidth")
+                    threadKbps
                 );
                 await this.delay(1000);
 
@@ -633,13 +652,7 @@ class BackupJob {
                 Key: key
             }
             let readStream = this.s3.getObject(params).createReadStream();
-            let throttleKBs = 500;
-            try {
-                throttleKBs = parseInt(this.config.get("config.bandwidth"));
-            } catch (err) {
-                this.consoleAppend("throttle not set - using default of 500 KBps per second");
-            }
-            let throttle = new Throttle({ bytes: throttleKBs * 1024, interval: 1000 });
+            let throttle = new Throttle({ bytes: threadKbps * 1024, interval: 1000 });
             let writeStream = fs.createWriteStream(fullPath);
             await pipeline(readStream, throttle, writeStream);
         }

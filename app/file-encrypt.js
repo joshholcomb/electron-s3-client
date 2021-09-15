@@ -78,10 +78,6 @@ class Encryptor {
                 console.log("writestream error: " + err);
             });
 
-            ws.on('finish', () => {
-                console.log("writestream finished");
-            });
-
             await pipeline(readStream, 
                 gzip,
                 cipher,
@@ -91,12 +87,11 @@ class Encryptor {
                 ws);
 
             p.then(() => {
-                console.log("upload completed successfully");
+                //console.log("upload completed successfully");
             }).catch((err) => {
                 console.log("error uploading file: " + err);
             });
             
-
         } catch (err) {
             console.log("error encrypting and uploading file: " + err);
         }

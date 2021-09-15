@@ -40,11 +40,6 @@ const argv = yargs
     .command('restore', 'restore data to local directory')
     .command('pruneBackup', 'prune extra s3 objects from backup')
     .command('config', 'command to configure the app', {
-        threads: {
-            describe: 'number of threads to run',
-            demandOption: false,
-            type: 'text'
-        },
         endpoint: {
             describe: 's3 endpoint to use',
             demandOption: false,
@@ -75,16 +70,19 @@ const argv = yargs
             demandOption: false,
             type: 'text'
         },
-        bandwidth: {
-            describe: 'set upload bytes per second',
-            demandOption: false,
-            type: 'text'
-        },
         print: {
             describe: 'print config',
             demandOption: false,
             type: 'boolean'
         }
+    })
+    .option('threads', {
+        description: 'number of threads for job',
+        type: 'text'
+    })
+    .option('bandwidth', {
+        description: 'KBps per thread',
+        type: 'text'
     })
     .option('localdir', {
         alias: 'l',
@@ -154,6 +152,11 @@ async function main() {
             return;
         }
 
+        if (!argv.s3folder) {
+            console.log("missing --s3folder option");
+            return;
+        }
+
         let backupJob = new BackupJob( config, certFile);
         backupJob.connectToS3();
 
@@ -162,7 +165,7 @@ async function main() {
             backupJob.setEncryption(true);
         }
 
-        backupJob.doBackup(argv.localdir, argv.s3bucket, argv.s3folder, argv.excludedirs);
+        backupJob.doBackup(argv.localdir, argv.s3bucket, argv.s3folder, argv.excludedirs, argv.threads, argv.bandwidth);
     }
 
     // pruneExtraS3
@@ -222,7 +225,7 @@ async function main() {
 
         let backupJob = new BackupJob(config, certFile);
         backupJob.connectToS3();
-        backupJob.doRestore(argv.localdir, bucket, argv.s3folder);
+        backupJob.doRestore(argv.localdir, bucket, argv.s3folder, argv.thread, argv.bandwidth);
     }
 
     // config app
