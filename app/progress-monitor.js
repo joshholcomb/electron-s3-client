@@ -15,7 +15,8 @@ class ProgressMonitor extends Transform {
         let processedKb = Math.round(this.processedBytes / 1024);
         let totalKb = Math.round(this.totalBytes / 1024);
 
-        if (processedKb % 1000 === 0) {
+        if (processedKb > 1000 && 
+            processedKb % 1000 === 0) {
             this.consoleAppend(this.file + " - processed [" + processedKb + "KB] of [" + totalKb + "KB]");
         }
 

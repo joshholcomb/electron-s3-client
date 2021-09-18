@@ -8,7 +8,7 @@ var https = require('https');
 const stream = require('stream');
 const Throttle = require('throttle-stream');
 const ProgressMonitor = require('./progress-monitor');
-const pipeline = require('util').promisify(require("stream").pipeline);
+//const pipeline = require('util').promisify(require("stream").pipeline);
 
 
 /*
@@ -448,15 +448,17 @@ class BackupJob {
                 let encKey = this.config.get("encryption.passphrase");
                 let i = 0;
                 while (i < 3) {
-                    try {
-                        await encryptor.encryptFileAndUploadStream(f, 
-                            encKey, this.s3, bucket, 
-                            uploadKey, throttleKBs, 
-                            this.guimode);
+                    
+                    const uploadRes = await encryptor.encryptFileAndUploadStream(f, 
+                        encKey, this.s3, bucket, 
+                        uploadKey, throttleKBs, 
+                        this.guimode);
+                    
+                    if (uploadRes === true) {
                         this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + uploadKey + "]");
                         break;
-                    } catch (err) {
-                        this.consoleAppend("error uploading file [" + f + "] - err: " + err);
+                    } else {
+                        this.consoleAppend("try [" + i + "] ERROR uploading file [" + f + "] - err: " + err);
                         if (i == 2) {
                             this.addErrorFile(f);
                         }
@@ -468,12 +470,12 @@ class BackupJob {
                 // do not encrypt - just upload
                 let i = 0;
                 while (i < 3) {
-                    try {
-                        await this.uploadFileAsStream(f, bucket, key, throttleKBs);
-                        this.consoleAppend("uploaded [" + f + "] to [" + key + "]");
+                    let uploadRes = await this.uploadFileAsStream(f, bucket, key, throttleKBs);
+                    if (uploadRes === true) {
+                        this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + key + "]");
                         break;
-                    } catch (err) {
-                        this.consoleAppend("ERROR - file: " + f + " error: " + err);
+                    } else {
+                        this.consoleAppend("try [" + i + "] ERROR - file: " + f + " error: " + err);
                         if (i == 2) {
                             this.addErrorFile(f);
                         }
@@ -526,18 +528,24 @@ class BackupJob {
         let ws = new stream.PassThrough();
         let promise = this.s3.upload({ Bucket: bucket, Key: key, Body: ws }).promise();
 
-        await pipeline(
-            readStream,
-            throttle,
-            pm,
-            ws
-        );
+        const result = await new Promise((resolve, reject) => {
+            ws.on('finish', () => {
+                resolve(true);
+            });
+            ws.on('end', () => {
+                resolve(true);
+            });
+            ws.on('error', () => {
+                reject(false);
+            });
 
-        promise.then(() => {
-            //console.log("upload complete");
-        }).catch((err) => {
-            console.log("error uploading file: " + err);
+            readStream
+                .pipe(throttle)
+                .pipe(pm)
+                .pipe(ws);
         });
+
+        return(result);
     }
 
     //
@@ -564,7 +572,12 @@ class BackupJob {
         try {
             data = await this.s3.headObject(params).promise();
         } catch (err) {
-            return doUpload;
+            if (err.code === 'NotFound') {
+                return doUpload;
+            } else {
+                this.consoleAppend("headObject error: " + err + " - uploading");
+                return doUpload;
+            }
         }
 
         objectExists = true;
@@ -653,8 +666,24 @@ class BackupJob {
             }
             let readStream = this.s3.getObject(params).createReadStream();
             let throttle = new Throttle({ bytes: threadKbps * 1024, interval: 1000 });
-            let writeStream = fs.createWriteStream(fullPath);
-            await pipeline(readStream, throttle, writeStream);
+            let ws = fs.createWriteStream(fullPath);
+            let result = await new Promise((resolve, reject) => {
+                ws.on('finish', () => {
+                    resolve(true);
+                });
+                
+                ws.on('end', () => {
+                    resolve(true);
+                });
+
+                ws.on('error', () => {
+                    reject(false);
+                });
+
+                readStream.pipe(ws);
+            });
+
+            //await pipeline(readStream, throttle, writeStream);
         }
         
         this.consoleAppend("file processed");

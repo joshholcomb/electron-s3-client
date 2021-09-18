@@ -354,7 +354,9 @@ function uploadFilesToS3V2(bucket, folderName) {
 
 
 function downloadFilesFromS3V2(bucket, folderName, localDir) {
+    let threads = document.getElementById("txtNumThreads").value;
+    let kbps = document.getElementById("txtThreadKbps").value;
     backupJob.connectToS3();
     backupJob.setGuiMode(true);
-    backupJob.doRestore(localDir, bucket, folderName);
+    backupJob.doRestore(localDir, bucket, folderName, threads, kbps);
 }

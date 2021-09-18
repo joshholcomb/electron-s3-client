@@ -7,7 +7,8 @@ const RemoveInitVect = require('./remove-init-vect.js');
 const ProgressMonitor = require('./progress-monitor');
 const stream = require('stream');
 const Throttle = require('throttle-stream');
-const pipeline = require('util').promisify(require("stream").pipeline);
+//const pipeline = require('util').promisify(require("stream").pipeline);
+//const { pipeline } = require('stream/promises');
 
 
 class Encryptor {
@@ -78,19 +79,30 @@ class Encryptor {
                 console.log("writestream error: " + err);
             });
 
-            await pipeline(readStream, 
-                gzip,
-                cipher,
-                appendInitVect,
-                throttle,
-                pm,
-                ws);
 
-            p.then(() => {
-                //console.log("upload completed successfully");
-            }).catch((err) => {
-                console.log("error uploading file: " + err);
+            const result = await new Promise((resolve, reject) => {
+                ws.on('finish', () => {
+                    resolve(true);
+                });
+                ws.on('end', () => {
+                    resolve(true);
+                });
+                ws.on('error', () => {
+                    reject(false);
+                });
+
+                readStream
+                    .pipe(throttle)
+                    .pipe(gzip)
+                    .pipe(cipher)
+                    .pipe(appendInitVect)
+                    .pipe(pm)
+                    .pipe(ws);
+
             });
+
+
+            return(result);
             
         } catch (err) {
             console.log("error encrypting and uploading file: " + err);
@@ -127,12 +139,28 @@ class Encryptor {
         });
 
         decipher = crypto.createDecipheriv('aes-256-cbc', cipherKey, iv);
-        await pipeline(rs, 
-            decipher, 
-            unzip, 
-            throttle, 
-            ws);
-        
+
+
+        let result = await new Promise((resolve, reject) => {
+            ws.on('end', () => {
+                resolve(true);
+            });
+
+            ws.on('finish', () => {
+                resolve(true);
+            });
+
+            ws.on('error', () => {
+                reject(false);
+            });
+
+            rs.pipe(decipher)
+                .pipe(unzip)
+                .pipe(throttle)
+                .pipe(ws);
+        });
+
+        return(result);
     }
 
     getCipherKey(password) {
