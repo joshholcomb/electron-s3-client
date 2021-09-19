@@ -1,12 +1,12 @@
 const { Transform } = require('stream');
 
 class ProgressMonitor extends Transform {
-    constructor(totalBytes, file, guimode, opts) {
+    constructor(totalBytes, guimode, key, opts) {
         super(opts);
         this.totalBytes = totalBytes;
         this.processedBytes = 0;
-        this.file = file;
         this.guimode = guimode;
+        this.key = key;
     }
 
     _transform(chunk, encoding, cb) {
@@ -17,7 +17,7 @@ class ProgressMonitor extends Transform {
 
         if (processedKb > 1000 && 
             processedKb % 1000 === 0) {
-            this.consoleAppend(this.file + " - processed [" + processedKb + "KB] of [" + totalKb + "KB]");
+            this.consoleAppend(this.key + " - [" + processedKb + "KB] of [" + totalKb + "KB]");
         }
 
         // callback

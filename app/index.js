@@ -137,7 +137,20 @@ function backupButton() {
     }
     console.log("bucket entered: [" + bucket.value + "]");
    
-    uploadFilesToS3V2(bucket.value, dir);
+    backupJob.connectToS3();
+
+    let doEncrypt = document.getElementById("encryptCheckBox").checked;
+    if (doEncrypt === true) {
+        console.log("setting encrypt flag = true");
+        backupJob.setEncryption(true);
+    }
+
+    let s3Folder = document.getElementById("txtS3Folder").value;
+    let excludeDirs = document.getElementById("txtExcludeDirs").value;
+    let threads = document.getElementById("txtNumThreads").value;
+    let kbps = document.getElementById("txtThreadKbps").value;
+    backupJob.setGuiMode(true);
+    backupJob.doBackup(dir, bucket.value, s3Folder, excludeDirs, threads, kbps);
 }
 
 function decryptButton() {
@@ -219,7 +232,11 @@ function restoreButton() {
     }
 
     // got all input data - call restore function
-    downloadFilesFromS3V2(bucket.value, s3Folder.value, dir);
+    let threads = document.getElementById("txtNumThreads").value;
+    let kbps = document.getElementById("txtThreadKbps").value;
+    backupJob.connectToS3();
+    backupJob.setGuiMode(true);
+    backupJob.doRestore(dir, bucket.value, s3Folder.value, threads, kbps);
 }
 
 // append msg to text area for console messages
@@ -330,33 +347,4 @@ async function listBucketFoldersV2(bucket) {
 // sleep function
 async function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-
-//
-//  fired by the backupButton function
-//
-function uploadFilesToS3V2(bucket, folderName) {
-    backupJob.connectToS3();
-
-    let doEncrypt = document.getElementById("encryptCheckBox").checked;
-    if (doEncrypt === true) {
-        console.log("setting encrypt flag = true");
-        backupJob.setEncryption(true);
-    }
-    let s3Folder = document.getElementById("txtS3Folder").value;
-    let excludeDirs = document.getElementById("txtExcludeDirs").value;
-    let threads = document.getElementById("txtNumThreads").value;
-    let kbps = document.getElementById("txtThreadKbps").value;
-    backupJob.setGuiMode(true);
-    backupJob.doBackup(folderName, bucket, s3Folder, excludeDirs, threads, kbps);
-}
-
-
-function downloadFilesFromS3V2(bucket, folderName, localDir) {
-    let threads = document.getElementById("txtNumThreads").value;
-    let kbps = document.getElementById("txtThreadKbps").value;
-    backupJob.connectToS3();
-    backupJob.setGuiMode(true);
-    backupJob.doRestore(localDir, bucket, folderName, threads, kbps);
 }

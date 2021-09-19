@@ -60,36 +60,52 @@ class Encryptor {
             .pipe(writeStream);
     }
 
+    //
+    // encrypt a file and upload to s3 as a stream
+    // return (true/false)
+    //
     async encryptFileAndUploadStream(inFile, password, s3, bucket, key, kBps, guimode) {
+        let resObj = { success: false, errCode: 'none'};
+        
+        let initVect = crypto.randomBytes(16);
+        let k = this.getCipherKey(password);
+        let readStream = fs.createReadStream(inFile);
+        let gzip = zlib.createGzip();
+        let cipher = crypto.createCipheriv("aes-256-cbc", k, initVect);
+        let appendInitVect = new AppendInitVect(initVect);
+        let throttle = new Throttle({ bytes: kBps * 1024, interval: 1000 });
+        let stats = fs.statSync(inFile);
+        let fileSize = stats.size;
+        let pm = new ProgressMonitor(fileSize, guimode, key);
+        var ws = new stream.PassThrough();
+        let p = s3.upload({Bucket: bucket, Key: key, Body: ws }).promise();
+
         try {
-            let initVect = crypto.randomBytes(16);
-            let k = this.getCipherKey(password);
-            let readStream = fs.createReadStream(inFile);
-            let gzip = zlib.createGzip();
-            let cipher = crypto.createCipheriv("aes-256-cbc", k, initVect);
-            let appendInitVect = new AppendInitVect(initVect);
-            let throttle = new Throttle({ bytes: kBps * 1024, interval: 1000 });
-            let stats = fs.statSync(inFile);
-            let fileSize = stats.size;
-            let pm = new ProgressMonitor(fileSize, inFile, guimode);
-            var ws = new stream.PassThrough();
-            let p = s3.upload({Bucket: bucket, Key: key, Body: ws }).promise();
+            const upResult = await new Promise((resolve, reject) => {
 
-            ws.on('error', (err) => {
-                console.log("writestream error: " + err);
-            });
+                p.then(() => {
+                    resObj.success = true;
+                    resolve(true);
+                }).catch((err) => {
+                    console.log("caught error in s3.upload promise: " + err);
+                    resObj.success = false;
+                    resObj.errCode = err.code;
+                    ws.emit('error');
+                    readStream.unpipe();
+                    reject("error uploading s3 object");
+                });
 
-
-            const result = await new Promise((resolve, reject) => {
+                /*
                 ws.on('finish', () => {
                     resolve(true);
                 });
-                ws.on('end', () => {
-                    resolve(true);
-                });
+            
                 ws.on('error', () => {
-                    reject(false);
+                    resObj.success = false;
+                    readStream.unpipe();
+                    reject("received error on write stream");
                 });
+                */
 
                 readStream
                     .pipe(throttle)
@@ -98,21 +114,20 @@ class Encryptor {
                     .pipe(appendInitVect)
                     .pipe(pm)
                     .pipe(ws);
-
             });
 
-
-            return(result);
-            
         } catch (err) {
-            console.log("error encrypting and uploading file: " + err);
+            console.log("error uploading file: " + err);
         }
+
+        return (resObj);
+
     }
 
     //
     // download object and decrypt before writing to disk
     //
-    async downloadStreamAndDecrypt(s3, s3bucket, s3key, passphrase, writeFile, kBps) {
+    async downloadStreamAndDecrypt(s3, s3bucket, s3key, passphrase, writeFile, kBps, guimode) {
         // get initVect
         var params = {
             Bucket: s3bucket,
@@ -126,6 +141,8 @@ class Encryptor {
         let cipherKey = this.getCipherKey(passphrase);
         let unzip = zlib.createGunzip();
         let throttle = new Throttle({ bytes: kBps * 1024, interval: 1000 });
+        let fileSize = 0;
+        let pm = new ProgressMonitor(fileSize, guimode, s3key);
         let ws = fs.createWriteStream(writeFile);
 
         iv = await new Promise((resolve, reject) => {
@@ -157,6 +174,7 @@ class Encryptor {
             rs.pipe(decipher)
                 .pipe(unzip)
                 .pipe(throttle)
+                .pipe(pm)
                 .pipe(ws);
         });
 

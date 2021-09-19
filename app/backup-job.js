@@ -383,9 +383,8 @@ class BackupJob {
             );
         }
 
-        const result = await Promise.all(promises).then((values) => {
-            console.log("finished");
-            this.delay(2000);
+        Promise.all(promises).then((values) => {
+            this.consoleAppend("restore finished");
         });
     }
 
@@ -419,9 +418,6 @@ class BackupJob {
             return;
         }
 
-        //this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - processing file: " + f);
-
-
         // analyze the file to see if we need to upload
         // does files exist on s3 bucket.  if so, is it outdated?
         let doUpload = await this.analyzeFile(f, key, bucket);
@@ -446,19 +442,27 @@ class BackupJob {
                 // now encrypt and upload
                 let encryptor = new Encryptor();
                 let encKey = this.config.get("encryption.passphrase");
-                let i = 0;
+                let i = 1;
                 while (i < 3) {
-                    
                     const uploadRes = await encryptor.encryptFileAndUploadStream(f, 
                         encKey, this.s3, bucket, 
                         uploadKey, throttleKBs, 
                         this.guimode);
                     
-                    if (uploadRes === true) {
-                        this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + uploadKey + "]");
+                    console.log("uploadRes : " + JSON.stringify(uploadRes));
+
+                    if (uploadRes.success === true) {
+                        this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + uploadKey + "]");
                         break;
                     } else {
-                        this.consoleAppend("try [" + i + "] ERROR uploading file [" + f + "] - err: " + err);
+                        this.consoleAppend("try [" + i + " of 2] ERROR uploading [" + uploadKey + "] : " + uploadRes.errCode);
+
+                        if (uploadRes.errCode === "UnknownEndpoint") {
+                            this.consoleAppend("endpoint down - setting runStatus to false");
+                            this.runStatus = false;
+                            i = 2;
+                        }
+
                         if (i == 2) {
                             this.addErrorFile(f);
                         }
@@ -471,11 +475,11 @@ class BackupJob {
                 let i = 0;
                 while (i < 3) {
                     let uploadRes = await this.uploadFileAsStream(f, bucket, key, throttleKBs);
-                    if (uploadRes === true) {
-                        this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + f + "] to [" + key + "]");
+                    if (uploadRes.success === true) {
+                        this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + key + "]");
                         break;
                     } else {
-                        this.consoleAppend("try [" + i + "] ERROR - file: " + f + " error: " + err);
+                        this.consoleAppend("try [" + i + "] ERROR uploading [" + k + "] : " + uploadRes.errCode);
                         if (i == 2) {
                             this.addErrorFile(f);
                         }
@@ -485,7 +489,7 @@ class BackupJob {
                 }
             }  
         } else {
-            this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - file [" + f + "] - s3 object is current");
+            this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - [" + key + "] - s3 object is current");
         }
 
         // do a little timing
@@ -520,32 +524,41 @@ class BackupJob {
 
     // upload a file via streams
     async uploadFileAsStream (f, bucket, key, kBps) {
+        let resObj = { success: false, errCode: 'none' };
+
         let readStream = fs.createReadStream(f);
         let throttle = new Throttle({ bytes: kBps * 1024, interval: 1000 });
         let stats = fs.statSync(f);
         let fileSize = stats.size;
-        let pm = new ProgressMonitor(fileSize, f, this.guimode);
+        let pm = new ProgressMonitor(fileSize, this.guimode, key);
         let ws = new stream.PassThrough();
-        let promise = this.s3.upload({ Bucket: bucket, Key: key, Body: ws }).promise();
+        let p = this.s3.upload({ Bucket: bucket, Key: key, Body: ws }).promise();
 
-        const result = await new Promise((resolve, reject) => {
-            ws.on('finish', () => {
-                resolve(true);
-            });
-            ws.on('end', () => {
-                resolve(true);
-            });
-            ws.on('error', () => {
-                reject(false);
+        try {
+            const upResult = await new Promise((resolve, reject) => {
+                p.then(() => {
+                    resObj.success = true;
+                    resolve(true);
+                }).catch((err) => {
+                    console.log("caught error in s3.upload promise: " + err);
+                    resObj.success = false;
+                    resObj.errCode = err.code;
+                    ws.emit('error');
+                    readStream.unpipe();
+                    reject("error uploading s3 object");
+                });
+
+                readStream
+                    .pipe(throttle)
+                    .pipe(pm)
+                    .pipe(ws);
             });
 
-            readStream
-                .pipe(throttle)
-                .pipe(pm)
-                .pipe(ws);
-        });
+        } catch (err) {
+            console.log("error uploading file: " + err);
+        }
 
-        return(result);
+        return (resObj);
     }
 
     //
@@ -574,8 +587,12 @@ class BackupJob {
         } catch (err) {
             if (err.code === 'NotFound') {
                 return doUpload;
+            } else if (err.code === 'UnknownEndpoint') {
+                this.consoleAppend("cannot contact host - runSTatus to false");
+                this.runStatus = false;
+                return doUpload;
             } else {
-                this.consoleAppend("headObject error: " + err + " - uploading");
+                this.consoleAppend("headObject error: " + err.code + " - uploading");
                 return doUpload;
             }
         }
@@ -606,8 +623,6 @@ class BackupJob {
 
         return(doUpload);
     }
-
-   
 
     //
     // process a single file for download
@@ -647,7 +662,8 @@ class BackupJob {
                     bucket, key, 
                     this.config.get("encryption.passphrase"), 
                     fullPath,
-                    threadKbps
+                    threadKbps,
+                    this.guimode
                 );
                 await this.delay(1000);
 
@@ -666,6 +682,8 @@ class BackupJob {
             }
             let readStream = this.s3.getObject(params).createReadStream();
             let throttle = new Throttle({ bytes: threadKbps * 1024, interval: 1000 });
+            let fileSize = 0;
+            let pm = new ProgressMonitor(fileSize, this.guimode, key);
             let ws = fs.createWriteStream(fullPath);
             let result = await new Promise((resolve, reject) => {
                 ws.on('finish', () => {
@@ -680,13 +698,11 @@ class BackupJob {
                     reject(false);
                 });
 
-                readStream.pipe(ws);
+                readStream.pipe(throttle)
+                    .pipe(pm)
+                    .pipe(ws);
             });
-
-            //await pipeline(readStream, throttle, writeStream);
         }
-        
-        this.consoleAppend("file processed");
 
 
         // do a little timing
