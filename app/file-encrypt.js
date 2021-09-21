@@ -80,48 +80,38 @@ class Encryptor {
         var ws = new stream.PassThrough();
         let p = s3.upload({Bucket: bucket, Key: key, Body: ws }).promise();
 
+        ws.on('error', (err) => {
+            console.log("error on write stream: " + err);
+            resObj.success = false;
+            resObj.errCode = err;
+            readStream.unpipe();
+        });
+
+        readStream.on('error', (err) => {
+            console.log("error on read stream: " + err);
+            resObj.success = false;
+            resObj.errCode = err;
+            readStream.unpipe();
+        });
+
+        readStream
+            .pipe(throttle)
+            .pipe(gzip)
+            .pipe(cipher)
+            .pipe(appendInitVect)
+            .pipe(pm)
+            .pipe(ws);
+
         try {
-            const upResult = await new Promise((resolve, reject) => {
-
-                p.then(() => {
-                    resObj.success = true;
-                    resolve(true);
-                }).catch((err) => {
-                    console.log("caught error in s3.upload promise: " + err);
-                    resObj.success = false;
-                    resObj.errCode = err.code;
-                    ws.emit('error');
-                    readStream.unpipe();
-                    reject("error uploading s3 object");
-                });
-
-                /*
-                ws.on('finish', () => {
-                    resolve(true);
-                });
-            
-                ws.on('error', () => {
-                    resObj.success = false;
-                    readStream.unpipe();
-                    reject("received error on write stream");
-                });
-                */
-
-                readStream
-                    .pipe(throttle)
-                    .pipe(gzip)
-                    .pipe(cipher)
-                    .pipe(appendInitVect)
-                    .pipe(pm)
-                    .pipe(ws);
-            });
-
+            await p;
+            resObj.success = true;
         } catch (err) {
-            console.log("error uploading file: " + err);
+            console.log("error on promise (upload): " + err);
+            resObj.errCode = err;
+            readStream.unpipe();
         }
 
         return (resObj);
-
     }
 
     //

@@ -227,12 +227,12 @@ class BackupJob {
 
         Promise.all(promises).then(() => {
             this.consoleAppend("backup job finished.");
+
+            this.consoleAppend("===error files===");
+            for (let f of this.errorFiles) {
+                this.consoleAppend(f);
+            }
         });
-        /*
-        (async () => {
-            const result = await Promise.all(promises);
-        });
-        */
 
     }
 
@@ -449,7 +449,7 @@ class BackupJob {
                         uploadKey, throttleKBs, 
                         this.guimode);
                     
-                    console.log("uploadRes : " + JSON.stringify(uploadRes));
+                    //console.log("uploadRes : " + JSON.stringify(uploadRes));
 
                     if (uploadRes.success === true) {
                         this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + uploadKey + "]");
@@ -534,28 +534,35 @@ class BackupJob {
         let ws = new stream.PassThrough();
         let p = this.s3.upload({ Bucket: bucket, Key: key, Body: ws }).promise();
 
+
+        ws.on('error', (err) => {
+            console.log("error on write stream: " + err);
+            resObj.success = false;
+            resObj.errCode = err;
+            readStream.unpipe();
+        });
+
+        readStream.on('error', (err) => {
+            console.log("error on read stream: " + err);
+            resObj.success = false;
+            resObj.errCode = err;
+            readStream.unpipe();
+        });
+
+        readStream
+            .pipe(throttle)
+            .pipe(pm)
+            .pipe(ws);
+
         try {
-            const upResult = await new Promise((resolve, reject) => {
-                p.then(() => {
-                    resObj.success = true;
-                    resolve(true);
-                }).catch((err) => {
-                    console.log("caught error in s3.upload promise: " + err);
-                    resObj.success = false;
-                    resObj.errCode = err.code;
-                    ws.emit('error');
-                    readStream.unpipe();
-                    reject("error uploading s3 object");
-                });
-
-                readStream
-                    .pipe(throttle)
-                    .pipe(pm)
-                    .pipe(ws);
-            });
-
+            await p;
+            resObj.success = true;
         } catch (err) {
             console.log("error uploading file: " + err);
+            resObj.success = false;
+            resObj.errCode = err;
+            ws.emit('error');
+            readStream.unpipe();
         }
 
         return (resObj);
