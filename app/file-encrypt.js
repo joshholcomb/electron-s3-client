@@ -6,7 +6,6 @@ const AppendInitVect = require('./append-init-vect.js');
 const RemoveInitVect = require('./remove-init-vect.js');
 const ProgressMonitor = require('./progress-monitor');
 const stream = require('stream');
-const Throttle = require('throttle-stream');
 
 
 class Encryptor {
@@ -58,12 +57,7 @@ class Encryptor {
             .pipe(writeStream);
     }
 
-    //
-    // encrypt a file and upload to s3 as a stream
-    // return (true/false)
-    // deprecated
-    //
-    async encryptFileAndUploadStream(inFile, password, s3, bucket, key, kBps, guimode) {
+    async encryptFileAndUploadStream(inFile, password, s3, bucket, key) {
         let resObj = { success: false, errCode: 'none'};
         
         let initVect = crypto.randomBytes(16);
@@ -72,91 +66,14 @@ class Encryptor {
         let gzip = zlib.createGzip();
         let cipher = crypto.createCipheriv("aes-256-cbc", k, initVect);
         let appendInitVect = new AppendInitVect(initVect);
-        let throttle = new Throttle({ bytes: kBps * 1024, interval: 1000 });
-        let stats = fs.statSync(inFile);
-        let fileSize = stats.size;
-        let pm = new ProgressMonitor(fileSize, guimode, key);
-        var ws = new stream.PassThrough();
-        let p = s3.upload({Bucket: bucket, Key: key, Body: ws }).promise();
-
-        ws.on('error', (err) => {
-            console.log("error on write stream: " + err);
-            resObj.success = false;
-            resObj.errCode = err;
-        });
-
-        readStream.on('error', (err) => {
-            console.log("error on read stream: " + err);
-            resObj.success = false;
-            resObj.errCode = err;
-            ws.emit('error');
-        });
-
-        cipher.on('error', (err) => {
-            console.log("error in cipher stream: " + err);
-            resObj.success = false;
-            resObj.errCode = err;
-        });
-
-        gzip.on('error', (err) => {
-            console.log("error on zip stream: " + err);
-            resObj.success = false;
-            resObj.errCode = err;
-        });
-
-        throttle.on('error', (err) => {
-            console.log("error on throttle: " + err);
-            resObj.success = false;
-            resObj.errCode = err;
-        });
-
-        pm.on('error', (err) => {
-            console.log("error on progress monitor stream: " + err);
-            resObj.success = false;
-            resObj.errCode = err;
-        });
-
-        readStream
-            .pipe(throttle)
-            .pipe(gzip)
-            .pipe(cipher)
-            .pipe(appendInitVect)
-            .pipe(pm)
-            .pipe(ws);
-
-        try {
-            await p;
-            resObj.success = true;
-        } catch (err) {
-            console.log("error on promise (upload): " + err);
-            resObj.errCode = err;
-            readStream.unpipe();
-        }
-
-        return (resObj);
-    }
-
-    async encryptFileAndUploadStreamV2(inFile, password, s3, bucket, key, kBps, guimode) {
-        let resObj = { success: false, errCode: 'none'};
-        
-        let initVect = crypto.randomBytes(16);
-        let k = this.getCipherKey(password);
-        let readStream = fs.createReadStream(inFile);
-        let gzip = zlib.createGzip();
-        let cipher = crypto.createCipheriv("aes-256-cbc", k, initVect);
-        let appendInitVect = new AppendInitVect(initVect);
-        let throttle = new Throttle({ bytes: kBps * 1024, interval: 1000 });
-        
 
         var body = readStream
-            .pipe(throttle)
             .pipe(gzip)
             .pipe(cipher)
             .pipe(appendInitVect);
 
 
         var r = await new Promise((resolve, reject) => {
-
             var opts = {queueSize: 2, partSize: 1024 * 1024 * 10};
             s3.upload({Bucket: bucket, Key: key, Body: body}, opts).
             on('httpUploadProgress', function(evt) {
@@ -181,7 +98,7 @@ class Encryptor {
     //
     // download object and decrypt before writing to disk
     //
-    async downloadStreamAndDecrypt(s3, s3bucket, s3key, passphrase, writeFile, kBps, guimode) {
+    async downloadStreamAndDecrypt(s3, s3bucket, s3key, passphrase, writeFile, guimode) {
         // get initVect
         var params = {
             Bucket: s3bucket,
@@ -194,7 +111,6 @@ class Encryptor {
         var decipher = null;
         let cipherKey = this.getCipherKey(passphrase);
         let unzip = zlib.createGunzip();
-        let throttle = new Throttle({ bytes: kBps * 1024, interval: 1000 });
         let fileSize = 0;
         let pm = new ProgressMonitor(fileSize, guimode, s3key);
         let ws = fs.createWriteStream(writeFile);
@@ -227,7 +143,6 @@ class Encryptor {
 
             rs.pipe(decipher)
                 .pipe(unzip)
-                .pipe(throttle)
                 .pipe(pm)
                 .pipe(ws);
         });

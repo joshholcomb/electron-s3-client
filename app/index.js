@@ -58,8 +58,6 @@ let defaultBucket = document.getElementById("txtBucket");
 defaultBucket.value = config.get("s3.defaultBucket");
 let threads = document.getElementById("txtNumThreads");
 threads.value = config.get("config.numThreads");
-let kbps = document.getElementById("txtThreadKbps");
-kbps.value = config.get("config.bandwidth");
 
 // add listenerEvents for buttons
 document.getElementById("backupButton").addEventListener("click", backupButton);
@@ -148,9 +146,8 @@ function backupButton() {
     let s3Folder = document.getElementById("txtS3Folder").value;
     let excludeDirs = document.getElementById("txtExcludeDirs").value;
     let threads = document.getElementById("txtNumThreads").value;
-    let kbps = document.getElementById("txtThreadKbps").value;
     backupJob.setGuiMode(true);
-    backupJob.doBackup(dir, bucket.value, s3Folder, excludeDirs, threads, kbps);
+    backupJob.doBackup(dir, bucket.value, s3Folder, excludeDirs, threads);
 }
 
 function decryptButton() {
@@ -233,10 +230,9 @@ function restoreButton() {
 
     // got all input data - call restore function
     let threads = document.getElementById("txtNumThreads").value;
-    let kbps = document.getElementById("txtThreadKbps").value;
     backupJob.connectToS3();
     backupJob.setGuiMode(true);
-    backupJob.doRestore(dir, bucket.value, s3Folder.value, threads, kbps);
+    backupJob.doRestore(dir, bucket.value, s3Folder.value, threads);
 }
 
 // append msg to text area for console messages

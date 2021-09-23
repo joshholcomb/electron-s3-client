@@ -80,10 +80,6 @@ const argv = yargs
         description: 'number of threads for job',
         type: 'text'
     })
-    .option('bandwidth', {
-        description: 'KBps per thread',
-        type: 'text'
-    })
     .option('localdir', {
         alias: 'l',
         description: 'local directory',
@@ -165,7 +161,7 @@ async function main() {
             backupJob.setEncryption(true);
         }
 
-        backupJob.doBackup(argv.localdir, argv.s3bucket, argv.s3folder, argv.excludedirs, argv.threads, argv.bandwidth);
+        backupJob.doBackup(argv.localdir, argv.s3bucket, argv.s3folder, argv.excludedirs, argv.threads);
     }
 
     // pruneExtraS3
@@ -225,7 +221,7 @@ async function main() {
 
         let backupJob = new BackupJob(config, certFile);
         backupJob.connectToS3();
-        backupJob.doRestore(argv.localdir, bucket, argv.s3folder, argv.thread, argv.bandwidth);
+        backupJob.doRestore(argv.localdir, bucket, argv.s3folder, argv.thread);
     }
 
     // config app
@@ -263,11 +259,6 @@ async function main() {
         if (argv.tmpDir) {
             config.set("encryption.tmpDir", argv.tmpDir);
             console.log ("config - set encryption.tmpDir to : " + argv.tmpDir);
-        }
-
-        if (argv.bandwidth) {
-            config.set("config.bandwidth", argv.bandwidth);
-            console.log("config - set bandwidth to : " + argv.bandwidth);
         }
 
         if (argv.print === "true") {

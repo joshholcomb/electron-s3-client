@@ -6,8 +6,8 @@ const Encryptor = require('./file-encrypt');    // file encryption
 const pLimit = require('p-limit');
 var https = require('https');
 const stream = require('stream');
-const Throttle = require('throttle-stream');
 const ProgressMonitor = require('./progress-monitor');
+const { PassThrough } = require("stream");
 //const pipeline = require('util').promisify(require("stream").pipeline);
 
 
@@ -50,7 +50,7 @@ class BackupJob {
         var endpoint = this.config.get("s3.endpoint");
         var region = this.config.get("s3.awsRegion");
     
-        let timeoutMin = 30;
+        let timeoutMin = 60;
         let to = (timeoutMin * 60) * 1000;
 
         // set AWS timeout
@@ -170,7 +170,7 @@ class BackupJob {
     }
 
     // backup a specified folder to a specified s3 target
-    doBackup(localFolder, s3Bucket, s3Folder, excludeDirs, threads, threadKbps) {
+    doBackup(localFolder, s3Bucket, s3Folder, excludeDirs, threads) {
         let promises = [];
         let limit;
         if (threads) {
@@ -185,10 +185,6 @@ class BackupJob {
 
         const files = this.listLocalFiles(localFolder, [], excludeDirs);
         this.consoleAppend("files found: [" + files.length + "]");
-
-        if (!threadKbps) {
-            threadKbps = parseInt(this.config.get("config.bandwidth"));
-        }
         
         var fCount = 0;
         for (const f of files) {
@@ -219,8 +215,7 @@ class BackupJob {
                     f, 
                     s3Bucket, 
                     key,
-                    stats,
-                    threadKbps)
+                    stats)
                 )
             );
         }
@@ -335,7 +330,7 @@ class BackupJob {
     }
 
      // restore job
-    async doRestore(localFolder, bucket, s3Folder, threads, threadKbps) {
+    async doRestore(localFolder, bucket, s3Folder, threads) {
         let promises = [];
         let limit;
         if (threads) {
@@ -343,10 +338,6 @@ class BackupJob {
             limit = pLimit(parseInt(threads, 10));
         } else {
             limit = pLimit(parseInt(this.config.get("config.numThreads"), 10));
-        }
-
-        if (!threadKbps) {
-            threadKbps = parseInt(this.config.get("config.bandwidth"), 10);
         }
 
         var params = {
@@ -377,8 +368,7 @@ class BackupJob {
                     localFolder,
                     bucket,
                     k,
-                    stats,
-                    threadKbps)
+                    stats)
                 )
             );
         }
@@ -424,17 +414,6 @@ class BackupJob {
 
         // see if we need to upload
         if (doUpload === true) {
-            let throttleKBs = 500;
-            try {
-                if (threadKbps) {
-                    throttleKBs = parseInt(threadKbps);
-                } else {
-                    throttleKBs = parseInt(config.get("config.bandwidth"));
-                }
-            } catch (err) {
-                this.consoleAppend("throttle not set - using default of 500 KBps per second");
-            }
-
 
             if (this.encrypt === true) {
                 let uploadKey = key + ".enc";
@@ -444,12 +423,9 @@ class BackupJob {
                 let encKey = this.config.get("encryption.passphrase");
                 let i = 1;
                 while (i < 3) {
-                    const uploadRes = await encryptor.encryptFileAndUploadStreamV2(f, 
+                    const uploadRes = await encryptor.encryptFileAndUploadStream(f, 
                         encKey, this.s3, bucket, 
-                        uploadKey, throttleKBs, 
-                        this.guimode);
-                    
-                    //console.log("uploadRes : " + JSON.stringify(uploadRes));
+                        uploadKey);
 
                     if (uploadRes.success === true) {
                         this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + uploadKey + "]");
@@ -474,7 +450,7 @@ class BackupJob {
                 // do not encrypt - just upload
                 let i = 0;
                 while (i < 3) {
-                    let uploadRes = await this.uploadFileAsStream(f, bucket, key, throttleKBs);
+                    let uploadRes = await this.uploadFileAsStream(f, bucket, key);
                     if (uploadRes.success === true) {
                         this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + key + "]");
                         break;
@@ -523,48 +499,33 @@ class BackupJob {
     }
 
     // upload a file via streams
-    async uploadFileAsStream (f, bucket, key, kBps) {
+    async uploadFileAsStream (f, bucket, key) {
         let resObj = { success: false, errCode: 'none' };
 
         let readStream = fs.createReadStream(f);
-        let throttle = new Throttle({ bytes: kBps * 1024, interval: 1000 });
-        let stats = fs.statSync(f);
-        let fileSize = stats.size;
-        let pm = new ProgressMonitor(fileSize, this.guimode, key);
-        let ws = new stream.PassThrough();
-        let p = this.s3.upload({ Bucket: bucket, Key: key, Body: ws }).promise();
+        let ws = new PassThrough();
 
-
-        ws.on('error', (err) => {
-            console.log("error on write stream: " + err);
-            resObj.success = false;
-            resObj.errCode = err;
-            readStream.unpipe();
-        });
-
-        readStream.on('error', (err) => {
-            console.log("error on read stream: " + err);
-            resObj.success = false;
-            resObj.errCode = err;
-            readStream.unpipe();
-        });
-
-        readStream
-            .pipe(throttle)
-            .pipe(pm)
+        var body = readStream
             .pipe(ws);
 
-        try {
-            await p;
-            resObj.success = true;
-        } catch (err) {
-            console.log("error uploading file: " + err);
-            resObj.success = false;
-            resObj.errCode = err;
-            ws.emit('error');
-            readStream.unpipe();
-        }
+        var r = await new Promise((resolve, reject) => {
+            var opts = {queueSize: 2, partSize: 1024 * 1024 * 10};
+            this.s3.upload({Bucket: bucket, Key: key, Body: body}, opts).
+            on('httpUploadProgress', function(evt) {
+                console.log('Progress: ', evt.loaded, '/', evt.total);
+            }).
+            send(function(err, data) {
+                if (err) {
+                    console.log("error uploading: " + err);
+                    resolve(false);
+                } else {
+                    console.log("uploaded file at: " + data.Location);
+                    resolve(true);
+                }
+            });
+        });
 
+        resObj.success = r;
         return (resObj);
     }
 
@@ -634,14 +595,10 @@ class BackupJob {
     //
     // process a single file for download
     //
-    async processFileForDownload(localDir, bucket, key, stats, threadKbps) {
+    async processFileForDownload(localDir, bucket, key, stats) {
 
         if (this.runStatus === false) {
             return;
-        }
-
-        if (!threadKbps) {
-            threadKbps = parseInt(config.get("config.bandwidth"), 10);
         }
 
         // setup the directory for download
@@ -669,7 +626,6 @@ class BackupJob {
                     bucket, key, 
                     this.config.get("encryption.passphrase"), 
                     fullPath,
-                    threadKbps,
                     this.guimode
                 );
                 await this.delay(1000);

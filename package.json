@@ -23,7 +23,6 @@
     "p-limit": "^3.1.0",
     "popper.js": "^1.14.6",
     "s3-client": "^4.4.2",
-    "throttle-stream": "^0.0.8",
     "yargs": "^17.1.1",
     "zlib": "^1.0.5"
   },
