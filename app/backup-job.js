@@ -50,7 +50,7 @@ class BackupJob {
         var endpoint = this.config.get("s3.endpoint");
         var region = this.config.get("s3.awsRegion");
     
-        let timeoutMin = 240;
+        let timeoutMin = 30;
         let to = (timeoutMin * 60) * 1000;
 
         // set AWS timeout
@@ -444,7 +444,7 @@ class BackupJob {
                 let encKey = this.config.get("encryption.passphrase");
                 let i = 1;
                 while (i < 3) {
-                    const uploadRes = await encryptor.encryptFileAndUploadStream(f, 
+                    const uploadRes = await encryptor.encryptFileAndUploadStreamV2(f, 
                         encKey, this.s3, bucket, 
                         uploadKey, throttleKBs, 
                         this.guimode);
