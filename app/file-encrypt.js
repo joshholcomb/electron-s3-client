@@ -82,6 +82,7 @@ class Encryptor {
             send(function(err, data) {
                 if (err) {
                     console.log("error uploading: " + err);
+                    resObj.errCode = err;
                     resolve(false);
                 } else {
                     console.log("uploaded file at: " + data.Location);

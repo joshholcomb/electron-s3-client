@@ -89,9 +89,6 @@ function saveConfigSettings() {
     let encPass = document.getElementById("txtEncPass").value;
     config.set("encryption.passphrase", encPass);
 
-    // bandwidth
-    let bandwidth = document.getElementById("txtBandwidth").value;
-    config.set("config.bandwidth", bandwidth);
     alert("values set.");
 }
 

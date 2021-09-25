@@ -12,6 +12,8 @@ const BackupJob = require('./backup-job');
 const Store = require('./store');
 // end globals
 
+
+
 // catch errors
 process.on('uncaughtException', (err) => {
     console.log("error: " + err);
@@ -153,7 +155,7 @@ async function main() {
             return;
         }
 
-        let backupJob = new BackupJob( config, certFile);
+        let backupJob = new BackupJob(config, certFile);
         backupJob.connectToS3();
 
         if (argv.encrypt === true) {
@@ -161,10 +163,16 @@ async function main() {
             backupJob.setEncryption(true);
         }
 
-        backupJob.doBackup(argv.localdir, argv.s3bucket, argv.s3folder, argv.excludedirs, argv.threads);
+        backupJob.doBackup(argv.localdir, 
+                argv.s3bucket, 
+                argv.s3folder, 
+                argv.excludedirs, 
+                argv.threads);
     }
 
     // pruneExtraS3
+    // delete files from s3 that are not present in local folder
+    // maintenance job
     if (argv.pruneBackup === true) {
         if (!argv.s3bucket) {
             console.log("required option s3 bucket");

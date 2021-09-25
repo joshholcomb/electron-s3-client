@@ -403,7 +403,7 @@ class BackupJob {
     //
     // process a single file for upload
     //
-    async processFileForUpload(f, bucket, key, stats, threadKbps) {
+    async processFileForUpload(f, bucket, key, stats) {
         if (this.runStatus === false) {
             return;
         }
@@ -433,7 +433,7 @@ class BackupJob {
                     } else {
                         this.consoleAppend("try [" + i + " of 2] ERROR uploading [" + uploadKey + "] : " + uploadRes.errCode);
 
-                        if (uploadRes.errCode === "UnknownEndpoint") {
+                        if (uploadRes.errCode.includes("UnknownEndpoint")) {
                             this.consoleAppend("endpoint down - setting runStatus to false");
                             this.runStatus = false;
                             i = 2;
@@ -517,6 +517,7 @@ class BackupJob {
             send(function(err, data) {
                 if (err) {
                     console.log("error uploading: " + err);
+                    resObj.errCode = err;
                     resolve(false);
                 } else {
                     console.log("uploaded file at: " + data.Location);
@@ -556,7 +557,7 @@ class BackupJob {
             if (err.code === 'NotFound') {
                 return doUpload;
             } else if (err.code === 'UnknownEndpoint') {
-                this.consoleAppend("cannot contact host - runSTatus to false");
+                this.consoleAppend("cannot contact host - runStatus to false");
                 this.runStatus = false;
                 return doUpload;
             } else {
