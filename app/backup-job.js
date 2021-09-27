@@ -221,9 +221,10 @@ class BackupJob {
         }
 
         Promise.all(promises).then(() => {
+            this.consoleAppend("====================");
             this.consoleAppend("backup job finished.");
 
-            this.consoleAppend("===error files===");
+            this.consoleAppend("====error files====");
             for (let f of this.errorFiles) {
                 this.consoleAppend(f);
             }
@@ -434,7 +435,7 @@ class BackupJob {
                         this.consoleAppend("try [" + i + " of 2] ERROR uploading [" + uploadKey + "] : " + uploadRes.errCode);
 
                         if (uploadRes.errCode.includes("UnknownEndpoint")) {
-                            this.consoleAppend("endpoint down - setting runStatus to false");
+                            this.consoleAppend("endpoint down - will not retry and setting runStatus = false");
                             this.runStatus = false;
                             i = 2;
                         }
@@ -455,7 +456,14 @@ class BackupJob {
                         this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + key + "]");
                         break;
                     } else {
-                        this.consoleAppend("try [" + i + "] ERROR uploading [" + k + "] : " + uploadRes.errCode);
+                        this.consoleAppend("try [" + i + "] ERROR uploading [" + key + "] : " + uploadRes.errCode);
+
+                        if (uploadRes.errCode.includes("UnknownEndpoint")) {
+                            this.consoleAppend("endpoint down - will not retry and setting runStatus = false");
+                            this.runStatus = false;
+                            i = 2;
+                        }
+
                         if (i == 2) {
                             this.addErrorFile(f);
                         }
@@ -517,7 +525,7 @@ class BackupJob {
             send(function(err, data) {
                 if (err) {
                     console.log("error uploading: " + err);
-                    resObj.errCode = err;
+                    resObj.errCode = err.code;
                     resolve(false);
                 } else {
                     console.log("uploaded file at: " + data.Location);
@@ -557,7 +565,7 @@ class BackupJob {
             if (err.code === 'NotFound') {
                 return doUpload;
             } else if (err.code === 'UnknownEndpoint') {
-                this.consoleAppend("cannot contact host - runStatus to false");
+                this.consoleAppend("s3 headObject : cannot contact host - runStatus to false");
                 this.runStatus = false;
                 return doUpload;
             } else {
