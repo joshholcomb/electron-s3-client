@@ -737,7 +737,7 @@ class BackupJob {
                     for (let d of excludeDirs.split(',')) {
                         if (abs.toLowerCase().includes(d.toLowerCase())) {
                             excludeThis = true;
-                            self.consoleAppend("excluding directory: " + abs);
+                            self.logger.consoleAppend("excluding directory: " + abs);
                             break;
                         }
                     }
