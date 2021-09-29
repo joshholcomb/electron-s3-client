@@ -92,7 +92,7 @@ document.getElementById("selectFolderButton").addEventListener("click", updateFo
 
 // make backup job global
 var certFile = "./config/my-ca-cert.crt";
-var backupJob = new BackupJob(config, certFile);
+var backupJob = new BackupJob(config, certFile, true);
 
 //
 // invoked when user clicks the list buckets button

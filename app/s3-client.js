@@ -155,7 +155,7 @@ async function main() {
             return;
         }
 
-        let backupJob = new BackupJob(config, certFile);
+        let backupJob = new BackupJob(config, certFile, false);
         backupJob.connectToS3();
 
         if (argv.encrypt === true) {
@@ -189,7 +189,7 @@ async function main() {
             process.exit(1);
         }
 
-        let backupJob = new BackupJob(config, certFile);
+        let backupJob = new BackupJob(config, certFile, false);
         backupJob.connectToS3();
 
         backupJob.doPruneExtraS3Objects(argv.localdir, argv.s3bucket, argv.s3folder);
@@ -205,7 +205,7 @@ async function main() {
         
         console.log("listing folders for bucket: " + bucket);
 
-        let backupJob = new BackupJob(config, certFile);
+        let backupJob = new BackupJob(config, certFile, false);
         backupJob.connectToS3();
         var folders = await backupJob.listBucketFolders(bucket);
         console.log("===results: " + folders.length + "===");
@@ -227,7 +227,7 @@ async function main() {
             bucket = argv.s3bucket;
         }
 
-        let backupJob = new BackupJob(config, certFile);
+        let backupJob = new BackupJob(config, certFile, false);
         backupJob.connectToS3();
         backupJob.doRestore(argv.localdir, bucket, argv.s3folder, argv.thread);
     }

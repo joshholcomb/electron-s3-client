@@ -6,9 +6,17 @@ const AppendInitVect = require('./append-init-vect.js');
 const RemoveInitVect = require('./remove-init-vect.js');
 const ProgressMonitor = require('./progress-monitor');
 const stream = require('stream');
+const logger = require('./console-logger');
 
 
 class Encryptor {
+
+    logger;
+
+    constructor(logger) {
+        this.logger = logger;
+    }
+
 
     async encryptFile(inFile, outFile, password) {
         let initVect = crypto.randomBytes(16);
@@ -73,19 +81,20 @@ class Encryptor {
             .pipe(appendInitVect);
 
 
+        let self = this;
         var r = await new Promise((resolve, reject) => {
             var opts = {queueSize: 2, partSize: 1024 * 1024 * 10};
             s3.upload({Bucket: bucket, Key: key, Body: body}, opts).
             on('httpUploadProgress', function(evt) {
-                console.log('Progress: ', evt.loaded, '/', evt.total);
+                self.logger.consoleAppend("Progress: " + evt.loaded + "/" +  evt.total);
             }).
             send(function(err, data) {
                 if (err) {
-                    console.log("error uploading: " + err);
+                    self.logger.consoleAppend("error uploading: " + err);
                     resObj.errCode = err.code;
                     resolve(false);
                 } else {
-                    console.log("uploaded file at: " + data.Location);
+                    self.logger.consoleAppend("uploaded file at: " + data.Location);
                     resolve(true);
                 }
             });
@@ -113,7 +122,7 @@ class Encryptor {
         let cipherKey = this.getCipherKey(passphrase);
         let unzip = zlib.createGunzip();
         let fileSize = 0;
-        let pm = new ProgressMonitor(fileSize, guimode, s3key);
+        let pm = new ProgressMonitor(fileSize, this.logger, s3key);
         let ws = fs.createWriteStream(writeFile);
 
         iv = await new Promise((resolve, reject) => {

@@ -8,7 +8,8 @@ var https = require('https');
 const stream = require('stream');
 const ProgressMonitor = require('./progress-monitor');
 const { PassThrough } = require("stream");
-//const pipeline = require('util').promisify(require("stream").pipeline);
+const ConsoleLogger = require('./console-logger');
+const { Console } = require("console");
 
 
 /*
@@ -28,14 +29,18 @@ class BackupJob {
     errorFiles;         // keep a running list of errors
     numThreads = 1;     // number of threads for this job
     threadKbps = 200;   // throttle in KBps per thread
+    logger;
 
     // private variables
     s3;
 
-    constructor(config, certFile) {
+    constructor(config, certFile, guimode) {
         this.config = config;
         this.certFile = certFile;
         this.errorFiles = [];
+        this.guimode = guimode;
+
+        this.logger = new ConsoleLogger(guimode);
     }
 
     //
@@ -123,35 +128,11 @@ class BackupJob {
     addErrorFile(f) {
         this.errorFiles.push(f);
 
-        this.consoleAppend("error count: [" + this.errorFiles.length + "] - max 100");
+        this.logger.consoleAppend("error count: [" + this.errorFiles.length + "] - max 100");
 
         if (this.errorFiles.length > 100) {
-            this.consoleAppend("too many errors - exit");
+            this.logger.consoleAppend("too many errors - exit");
             process.exit(1);
-        }
-    }
-
-    //
-    // if running in guimode
-    //
-    consoleAppend(msg) {
-        if (this.guimode === true) {
-            var ta = document.getElementById("txtConsole");
-            var val = ta.value;
-            if (val) {
-                ta.value = val + '\n' + msg;
-            } else {
-                ta.value = msg;
-            }
-        
-            // scroll to end
-            ta.scrollTop = ta.scrollHeight;
-        
-            // if more than 200 lines - remove all but 200 lines
-            var txt = ta.value.length ? ta.value.split(/\n/g) : [];
-            ta.value = txt.slice(-200).join("\n");
-        } else {
-            console.log(msg);
         }
     }
 
@@ -174,17 +155,17 @@ class BackupJob {
         let promises = [];
         let limit;
         if (threads) {
-            this.consoleAppend("setting threads: " + threads);
+            this.logger.consoleAppend("setting threads: " + threads);
             limit = pLimit(parseInt(threads, 10));
         } else {
-            this.consoleAppend("setting threads to config value");
+            this.logger.consoleAppend("setting threads to config value");
             limit = pLimit(parseInt(this.config.get("config.numThreads"), 10));
         }
-        this.consoleAppend("starting backup of local folder: [" + localFolder + "]");
-        this.consoleAppend("traversing directory [" + localFolder + "]");
+        this.logger.consoleAppend("starting backup of local folder: [" + localFolder + "]");
+        this.logger.consoleAppend("traversing directory [" + localFolder + "]");
 
         const files = this.listLocalFiles(localFolder, [], excludeDirs);
-        this.consoleAppend("files found: [" + files.length + "]");
+        this.logger.consoleAppend("files found: [" + files.length + "]");
         
         var fCount = 0;
         for (const f of files) {
@@ -197,7 +178,7 @@ class BackupJob {
             stats.startTime = Date.now();
 
             if (!this.runStatus) {
-                this.consoleAppend("run status is false.");
+                this.logger.consoleAppend("run status is false.");
                 break;
             }
 
@@ -221,12 +202,12 @@ class BackupJob {
         }
 
         Promise.all(promises).then(() => {
-            this.consoleAppend("====================");
-            this.consoleAppend("backup job finished.");
+            this.logger.consoleAppend("====================");
+            this.logger.consoleAppend("backup job finished.");
 
-            this.consoleAppend("====error files====");
+            this.logger.consoleAppend("====error files====");
             for (let f of this.errorFiles) {
-                this.consoleAppend(f);
+                this.logger.consoleAppend(f);
             }
         });
 
@@ -258,16 +239,14 @@ class BackupJob {
                     dF, 
                     this.config.get("encryption.passphrase"));
 
-                if (this.guimode === true) this.consoleAppend("decrypted file: [" + decryptedFile + "]");
-                console.log("decrypted file: [" + decryptedFile + "]");
+                this.logger.consoleAppend("decrypted file: [" + decryptedFile + "]");
         
                 await this.delay(1500);
                 fs.unlink(f, function (err) {
                     if (err) {
-                        if (this.guimode === true) this.consoleAppend("error deleting the enc file: " + err);
-                        console.log("error deleting the encFile : " + err);
+                        this.logger.consoleAppend("error deleting the enc file: " + err);
                     } else {
-                        console.log("deleted encrypted file: " + f);
+                        this.logger.consoleAppend("deleted encrypted file: " + f);
                     }
                 });
             }
@@ -284,7 +263,7 @@ class BackupJob {
         });
 
         if (data.isTruncated) {
-            this.consoleAppend("fetching continuation.");
+            this.logger.consoleAppend("fetching continuation.");
             params.ContinuationToken = data.NextContinuationToken;
             self.listS3Keys();
         } else {
@@ -304,9 +283,9 @@ class BackupJob {
 
         let allKeys = [];
         allKeys = await this.listS3Keys(params, allKeys);
-        this.consoleAppend("s3 objects found: " + allKeys.length);
+        this.logger.consoleAppend("s3 objects found: " + allKeys.length);
         const files = this.listLocalFiles(localFolder);
-        this.consoleAppend("local files found: " + files.length);
+        this.logger.consoleAppend("local files found: " + files.length);
         let i = 0;
         for (let k of allKeys) {
             i++;
@@ -315,19 +294,19 @@ class BackupJob {
             }
 
             if (i % 100 === 0) {
-                this.consoleAppend("[" + i + "] of [" + allKeys.length + "] - checking: " + k);
+                this.logger.consoleAppend("[" + i + "] of [" + allKeys.length + "] - checking: " + k);
             } 
 
             if (!this.isS3ObjectLocal(k, files) === true) {
-                this.consoleAppend("[" + i + "] of [" + allKeys.length + "] did not find local file for key: [" + k + "] - deleting from s3");
+                this.logger.consoleAppend("[" + i + "] of [" + allKeys.length + "] did not find local file for key: [" + k + "] - deleting from s3");
                 let delResult = await this.s3.deleteObject({Bucket: bucket, Key: k}).promise();
                 if (delResult.err) {
-                    this.consoleAppend("error deleting object: " + delResult.err);
+                    this.logger.consoleAppend("error deleting object: " + delResult.err);
                 }
             }
         }
 
-        this.consoleAppend("finished.");
+        this.logger.consoleAppend("finished.");
     }
 
      // restore job
@@ -335,7 +314,7 @@ class BackupJob {
         let promises = [];
         let limit;
         if (threads) {
-            this.consoleAppend("setting threads: " + threads);
+            this.logger.consoleAppend("setting threads: " + threads);
             limit = pLimit(parseInt(threads, 10));
         } else {
             limit = pLimit(parseInt(this.config.get("config.numThreads"), 10));
@@ -348,7 +327,7 @@ class BackupJob {
 
         let allKeys = [];
         allKeys = await this.listS3Keys(params, allKeys);
-        this.consoleAppend("objects found: " + allKeys.length);
+        this.logger.consoleAppend("objects found: " + allKeys.length);
 
         var j = 0;
         for (let k of allKeys) {
@@ -375,7 +354,7 @@ class BackupJob {
         }
 
         Promise.all(promises).then((values) => {
-            this.consoleAppend("restore finished");
+            this.logger.consoleAppend("restore finished");
         });
     }
 
@@ -409,6 +388,8 @@ class BackupJob {
             return;
         }
 
+        //this.logger.consoleAppend(f + " - processing");
+
         // analyze the file to see if we need to upload
         // does files exist on s3 bucket.  if so, is it outdated?
         let doUpload = await this.analyzeFile(f, key, bucket);
@@ -420,7 +401,7 @@ class BackupJob {
                 let uploadKey = key + ".enc";
 
                 // now encrypt and upload
-                let encryptor = new Encryptor();
+                let encryptor = new Encryptor(this.logger);
                 let encKey = this.config.get("encryption.passphrase");
                 let i = 1;
                 while (i < 3) {
@@ -429,13 +410,13 @@ class BackupJob {
                         uploadKey);
 
                     if (uploadRes.success === true) {
-                        this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + uploadKey + "]");
+                        this.logger.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + uploadKey + "]");
                         break;
                     } else {
-                        this.consoleAppend("try [" + i + " of 2] ERROR uploading [" + uploadKey + "] : " + uploadRes.errCode);
+                        this.logger.consoleAppend("try [" + i + " of 2] ERROR uploading [" + uploadKey + "] : " + uploadRes.errCode);
 
                         if (uploadRes.errCode.includes("UnknownEndpoint")) {
-                            this.consoleAppend("endpoint down - will not retry and setting runStatus = false");
+                            this.logger.consoleAppend("endpoint down - will not retry and setting runStatus = false");
                             this.runStatus = false;
                             i = 2;
                         }
@@ -453,13 +434,13 @@ class BackupJob {
                 while (i < 3) {
                     let uploadRes = await this.uploadFileAsStream(f, bucket, key);
                     if (uploadRes.success === true) {
-                        this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + key + "]");
+                        this.logger.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + key + "]");
                         break;
                     } else {
-                        this.consoleAppend("try [" + i + "] ERROR uploading [" + key + "] : " + uploadRes.errCode);
+                        this.logger.consoleAppend("try [" + i + "] ERROR uploading [" + key + "] : " + uploadRes.errCode);
 
                         if (uploadRes.errCode.includes("UnknownEndpoint")) {
-                            this.consoleAppend("endpoint down - will not retry and setting runStatus = false");
+                            this.logger.consoleAppend("endpoint down - will not retry and setting runStatus = false");
                             this.runStatus = false;
                             i = 2;
                         }
@@ -473,7 +454,7 @@ class BackupJob {
                 }
             }  
         } else {
-            this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - [" + key + "] - s3 object is current");
+            this.logger.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - [" + key + "] - s3 object is current");
         }
 
         // do a little timing
@@ -486,22 +467,22 @@ class BackupJob {
             if (m !== 0) {
                 rate = Math.round(stats.fCounter / m);
             }
-            this.consoleAppend("rate per min: " + rate);
+            this.logger.consoleAppend("rate per min: " + rate);
             let eta = Math.round((stats.fCount - stats.fCounter) / rate);
             this.updateRuntime(m,s, eta);
 
             // print memory usage
             const used = process.memoryUsage().heapUsed / 1024 / 1024;
-            this.consoleAppend("memory usage: " + Math.round(used * 100) / 100 + "MB");
+            this.logger.consoleAppend("memory usage: " + Math.round(used * 100) / 100 + "MB");
 
             // see if we have a stop file 
             try {
                 if (fs.existsSync("./stop")) {
-                    this.consoleAppend("stop file found - setting run status to false.");
+                    this.logger.consoleAppend("stop file found - setting run status to false.");
                     this.setRunStatus(false);
                 }
             } catch (err) {
-                this.consoleAppend("error checking for stop file: " + err);
+                this.logger.consoleAppend("error checking for stop file: " + err);
             }
         }
     }
@@ -516,19 +497,20 @@ class BackupJob {
         var body = readStream
             .pipe(ws);
 
+        let self = this;
         var r = await new Promise((resolve, reject) => {
             var opts = {queueSize: 2, partSize: 1024 * 1024 * 10};
             this.s3.upload({Bucket: bucket, Key: key, Body: body}, opts).
             on('httpUploadProgress', function(evt) {
-                console.log('Progress: ', evt.loaded, '/', evt.total);
+                self.logger.consoleAppend("Progress: " + evt.loaded + "/" +  evt.total);
             }).
             send(function(err, data) {
                 if (err) {
-                    console.log("error uploading: " + err);
+                    self.logger.consoleAppend("error uploading: " + err);
                     resObj.errCode = err.code;
                     resolve(false);
                 } else {
-                    console.log("uploaded file at: " + data.Location);
+                    self.logger.consoleAppend("uploaded file at: " + data.Location);
                     resolve(true);
                 }
             });
@@ -565,11 +547,11 @@ class BackupJob {
             if (err.code === 'NotFound') {
                 return doUpload;
             } else if (err.code === 'UnknownEndpoint') {
-                this.consoleAppend("s3 headObject : cannot contact host - runStatus to false");
+                this.logger.consoleAppend("s3 headObject : cannot contact host - runStatus to false");
                 this.runStatus = false;
                 return doUpload;
             } else {
-                this.consoleAppend("headObject error: " + err.code + " - uploading");
+                this.logger.consoleAppend("headObject error: " + err.code + " - uploading");
                 return doUpload;
             }
         }
@@ -589,7 +571,7 @@ class BackupJob {
                 s3Outdated = true;
             } 
         } catch (error) {
-            this.consoleAppend("error checking dates for file [" + f + "] - assume outdated.");
+            this.logger.consoleAppend("error checking dates for file [" + f + "] - assume outdated.");
             s3Outdated = true;
         }
         
@@ -615,10 +597,15 @@ class BackupJob {
         let writeFile = key.substring(key.lastIndexOf("/") + 1);
         writeDir = writeDir.replace(/\//g, '\\');
         let fullPath = writeDir + "\\" + writeFile;
-        this.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - downloading object: " + key);
+        this.logger.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - downloading object: " + key);
     
         // make sure target directory exists on local folder
         fs.mkdirSync(writeDir, { recursive: true});
+
+        var params = {
+            Bucket: bucket,
+            Key: key
+        }
     
         // download the object
         if (key.substring(key.length - 4) === ".enc") {
@@ -627,8 +614,14 @@ class BackupJob {
                 fullPath = fullPath.substring(0, fullPath.length - 4);
 
                 if (fs.existsSync(fullPath)) {
-                    this.consoleAppend("file already exists on restore point - skipping.");
-                    return;
+                    let data = await this.s3.headObject(params).promise();
+                    let stats = fs.statSync(fullPath);
+                    let s3Date = new Date(data.LastModified);
+                    let fileDate = new Date(stats.mtime);
+                    if (fileDate > s3Date) {
+                        this.logger.consoleAppend("file already exists on restore point and is current - skipping.");
+                        return;
+                    }
                 }
 
                 await e.downloadStreamAndDecrypt(this.s3, 
@@ -644,18 +637,20 @@ class BackupJob {
             }
         } else {
             if (fs.existsSync(fullPath)) {
-                console.log("file already exists on restore point - skipping");
-                return;
+                let data = "";
+                data = await this.s3.headObject(params).promise();
+                let stats = fs.statSync(fullPath);
+                let s3Date = new Date(data.LastModified);
+                let fileDate = new Date(stats.mtime);
+                if (fileDate > s3Date) {
+                    this.logger.consoleAppend("file already exists on restore point and is current - skipping.");
+                    return;
+                }
             }
             
-            var params = {
-                Bucket: bucket,
-                Key: key
-            }
             let readStream = this.s3.getObject(params).createReadStream();
-            let throttle = new Throttle({ bytes: threadKbps * 1024, interval: 1000 });
             let fileSize = 0;
-            let pm = new ProgressMonitor(fileSize, this.guimode, key);
+            let pm = new ProgressMonitor(fileSize, this.logger, key);
             let ws = fs.createWriteStream(fullPath);
             let result = await new Promise((resolve, reject) => {
                 ws.on('finish', () => {
@@ -670,7 +665,7 @@ class BackupJob {
                     reject(false);
                 });
 
-                readStream.pipe(throttle)
+                readStream
                     .pipe(pm)
                     .pipe(ws);
             });
@@ -687,23 +682,23 @@ class BackupJob {
             if (m !== 0) {
                 rate = Math.round(stats.fCounter / m);
             }
-            this.consoleAppend("rate per min: " + rate);
+            this.logger.consoleAppend("rate per min: " + rate);
             let eta = Math.round((stats.fCount - stats.fCounter) / rate);
             this.updateRuntime(m,s, eta);
 
             // see if we have a stop file 
             try {
                 if (fs.existsSync("./stop")) {
-                    this.consoleAppend("stop file found - setting run status to false.");
+                    this.logger.consoleAppend("stop file found - setting run status to false.");
                     this.setRunStatus(false);
                 }
             } catch (err) {
-                this.consoleAppend("error checking for stop file: " + err);
+                this.logger.consoleAppend("error checking for stop file: " + err);
             }
 
             // print mem usage
             const used = process.memoryUsage().heapUsed / 1024 / 1024;
-            this.consoleAppend("memory usage: " + Math.round(used * 100) / 100 + "MB");
+            this.logger.consoleAppend("memory usage: " + Math.round(used * 100) / 100 + "MB");
         } 
     }
 
