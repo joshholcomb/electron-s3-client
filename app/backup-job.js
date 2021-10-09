@@ -614,14 +614,8 @@ class BackupJob {
                 fullPath = fullPath.substring(0, fullPath.length - 4);
 
                 if (fs.existsSync(fullPath)) {
-                    let data = await this.s3.headObject(params).promise();
-                    let stats = fs.statSync(fullPath);
-                    let s3Date = new Date(data.LastModified);
-                    let fileDate = new Date(stats.mtime);
-                    if (fileDate > s3Date) {
-                        this.logger.consoleAppend("file already exists on restore point and is current - skipping.");
-                        return;
-                    }
+                    this.logger.consoleAppend("object exists in restore point - skipping...");
+                    return;
                 }
 
                 await e.downloadStreamAndDecrypt(this.s3, 
@@ -630,7 +624,7 @@ class BackupJob {
                     fullPath,
                     this.guimode
                 );
-                await this.delay(1000);
+                //await this.delay(1000);
 
             } catch (err) {
                 console.log("error : " + err);
