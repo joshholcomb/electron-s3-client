@@ -716,7 +716,7 @@ class BackupJob {
         try {
             files = fs.readdirSync(dirPath);
         } catch (err) {
-            myConsole.log(err.stack);
+            this.logger.consoleAppend(err.stack);
         }
       
         var self = this;

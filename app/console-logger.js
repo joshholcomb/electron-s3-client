@@ -1,3 +1,5 @@
+var os = require("os");
+
 
 
 class ConsoleLogger {
@@ -11,7 +13,7 @@ class ConsoleLogger {
             var ta = document.getElementById("txtConsole");
             var val = ta.value;
             if (val) {
-                ta.value = val + '\n' + msg;
+                ta.value = val + '\r\n' + msg;
             } else {
                 ta.value = msg;
             }
@@ -20,10 +22,10 @@ class ConsoleLogger {
             ta.scrollTop = ta.scrollHeight;
         
             // if more than 200 lines - remove all but 200 lines
-            var txt = ta.value.length ? ta.value.split(/\n/g) : [];
-            ta.value = txt.slice(-200).join("\n");
+            var txt = ta.value.length ? ta.value.split(/\r\n/g) : [];
+            ta.value = txt.slice(-200).join('\r\n');
         } else {
-            console.log(msg);
+            console.log(msg + os.EOL);
         }
     }
 }
