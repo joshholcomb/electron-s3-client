@@ -146,12 +146,16 @@ class BackupJob {
             let e = document.getElementById("lblETA");
             e.textContent = `${eta} min`;
         } else {
-            console.log("runtime: " + dur + " - eta: " + eta);
+            console.log("runtime: " + dur + " - eta: " + eta + "\r\n");
         }
     }
 
     // backup a specified folder to a specified s3 target
     doBackup(localFolder, s3Bucket, s3Folder, excludeDirs, threads) {
+
+        // clear error files from any previous run
+        this.errorFiles = [];
+
         let promises = [];
         let limit;
         if (threads) {
@@ -510,7 +514,7 @@ class BackupJob {
                     resObj.errCode = err.code;
                     resolve(false);
                 } else {
-                    self.logger.consoleAppend("uploaded file at: " + data.Location);
+                    //self.logger.consoleAppend("uploaded file at: " + data.Location);
                     resolve(true);
                 }
             });

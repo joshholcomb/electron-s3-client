@@ -138,7 +138,7 @@ async function main() {
 
     // backup job
     if (argv.backup === true) {
-        console.log("backup initiated");
+        console.log("backup initiated\r\n");
 
         if (!argv.localdir) {
             console.log("missing --localdir option");
@@ -159,7 +159,7 @@ async function main() {
         backupJob.connectToS3();
 
         if (argv.encrypt === true) {
-            console.log("setting encrypt flag = true");
+            console.log("setting encrypt flag = true\r\n");
             backupJob.setEncryption(true);
         }
 

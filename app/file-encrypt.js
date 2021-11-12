@@ -94,7 +94,7 @@ class Encryptor {
                     resObj.errCode = err.code;
                     resolve(false);
                 } else {
-                    self.logger.consoleAppend("uploaded file at: " + data.Location);
+                    //self.logger.consoleAppend("uploaded file at: " + data.Location);
                     resolve(true);
                 }
             });
