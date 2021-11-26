@@ -9,6 +9,11 @@ class ConsoleLogger {
     }
 
     consoleAppend(msg) {
+
+        // prepend date/time to msg
+        let dateTime = new Date();
+        msg = dateTime + ": " + msg;
+
         if (this.guimode === true) {
             var ta = document.getElementById("txtConsole");
             var val = ta.value;
@@ -25,7 +30,7 @@ class ConsoleLogger {
             var txt = ta.value.length ? ta.value.split(/\r\n/g) : [];
             ta.value = txt.slice(-200).join('\r\n');
         } else {
-            console.log(msg + os.EOL);
+            console.log(msg);
         }
     }
 }

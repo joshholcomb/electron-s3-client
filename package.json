@@ -4,13 +4,14 @@
   "description": "electron based s3 client",
   "main": "main.js",
   "scripts": {
-    "start": "electron --max-old-space-size=8192 --enable-logging ."
+    "start": "electron --max-old-space-size=4096 --enable-logging ."
   },
   "author": "holcomb",
   "license": "ISC",
   "devDependencies": {
     "axios": "^0.21.1",
-    "electron": "^14.0.0"
+    "electron": "^14.0.0",
+    "electron-packager": "^15.4.0"
   },
   "dependencies": {
     "aws-sdk": "^2.972.0",

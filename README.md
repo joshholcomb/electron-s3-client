@@ -21,13 +21,17 @@ This file will be created after first run with user settings.  On first run, cli
 your client to connect to your s3 endpoint.
 
 # gui and cli
-to run the gui
+To run the gui
 - download repo
 - npm install
 - npm start
 
-to run the cli
+To run the cli
 - download repo
 - npm install
 - node app\s3-client.js --command --options
 
+
+To build an executable
+- npm install --save-dev electron-packager
+- npx electron-packager . s3-client --patform=win --arch=x64

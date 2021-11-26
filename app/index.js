@@ -153,7 +153,7 @@ function backupButton() {
 function decryptButton() {
     let localDir = document.getElementById("txtLocalFolder").value;
     if (!localDir) {
-        alert("You must select the directory to decrypt.");
+        alert("no local directory selected.");
         return;
     }
 
@@ -163,7 +163,7 @@ function decryptButton() {
 function pruneButton() {
     let localDir = document.getElementById("txtLocalFolder").value;
     if (!localDir) {
-        alert("You must select the directory to decrypt.");
+        alert("no local directory selected.");
         return;
     }
 
@@ -175,7 +175,7 @@ function pruneButton() {
    
     var s3Folder = document.getElementById("txtS3Folder").value;
     if (s3Folder.length == 0) {
-        alert("bucket or src folder not entered.");
+        alert("no s3 folder entered.");
         return;
     }
 
