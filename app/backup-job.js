@@ -208,10 +208,13 @@ class BackupJob {
         Promise.all(promises).then(() => {
             this.logger.consoleAppend("====================");
             this.logger.consoleAppend("backup job finished.");
-
             this.logger.consoleAppend("====error files====");
-            for (let f of this.errorFiles) {
-                this.logger.consoleAppend(f);
+            if (this.errorFiles.length === 0) {
+                this.logger.consoleAppend("no error files");
+            } else {
+                for (let f of this.errorFiles) {
+                    this.logger.consoleAppend(f);
+                }
             }
         });
 
@@ -414,7 +417,7 @@ class BackupJob {
                         uploadKey);
 
                     if (uploadRes.success === true) {
-                        this.logger.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + uploadKey + "]");
+                        this.logger.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - [" + uploadKey + "] - s3 object uploaded");
                         break;
                     } else {
                         this.logger.consoleAppend("try [" + i + " of 2] ERROR uploading [" + uploadKey + "] : " + uploadRes.errCode);
@@ -438,7 +441,7 @@ class BackupJob {
                 while (i < 3) {
                     let uploadRes = await this.uploadFileAsStream(f, bucket, key);
                     if (uploadRes.success === true) {
-                        this.logger.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - uploaded [" + key + "]");
+                        this.logger.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - [" + key + "] - s3 object uploaded");
                         break;
                     } else {
                         this.logger.consoleAppend("try [" + i + "] ERROR uploading [" + key + "] : " + uploadRes.errCode);
@@ -514,7 +517,6 @@ class BackupJob {
                     resObj.errCode = err.code;
                     resolve(false);
                 } else {
-                    //self.logger.consoleAppend("uploaded file at: " + data.Location);
                     resolve(true);
                 }
             });
