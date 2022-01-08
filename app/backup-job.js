@@ -151,7 +151,7 @@ class BackupJob {
     }
 
     // backup a specified folder to a specified s3 target
-    doBackup(localFolder, s3Bucket, s3Folder, excludeDirs, threads) {
+    async doBackup(localFolder, s3Bucket, s3Folder, excludeDirs, threads) {
 
         // clear error files from any previous run
         this.errorFiles = [];
@@ -194,15 +194,36 @@ class BackupJob {
                 key = s3Folder + "/" + key;
             }
 
-            // process file
-            promises.push(
-                limit( () => this.processFileForUpload( 
-                    f, 
-                    s3Bucket, 
-                    key,
-                    stats)
-                )
-            );
+            // if this f is a directory, then it is an empty directory and we need to make sure
+            // that the key is uploaded.
+            if (fs.lstatSync(f).isDirectory() === true) {
+                key = key + "/";
+                this.logger.consoleAppend("file [" + f + "] is an empty directory");
+                let params = {
+                    Bucket: s3Bucket,
+                    Prefix: key
+                }
+                let data = await this.s3.listObjectsV2(params).promise();
+                if (data.Contents.length > 0) {
+                    this.logger.consoleAppend("folder [" + key + "] exists in s3");
+                } else {
+                    await this.s3.putObject({
+                        Key: key,
+                        Bucket: s3Bucket,
+                    }).promise(); 
+                    this.logger.consoleAppend("created key: [" + key + "]");
+                }
+            } else {
+                // process file
+                promises.push(
+                    limit( () => this.processFileForUpload( 
+                        f, 
+                        s3Bucket, 
+                        key,
+                        stats)
+                    )
+                );
+            }
         }
 
         Promise.all(promises).then(() => {
@@ -731,6 +752,7 @@ class BackupJob {
         files.forEach(function(file) {
             let abs = path.join(dirPath, file);
             if (fs.statSync(abs).isDirectory()) {
+                
                 let excludeThis = false;
 
                 if (excludeDirs) {
@@ -744,7 +766,12 @@ class BackupJob {
                 }
 
                 if (excludeThis === false) {
-                    arrayOfFiles = self.listLocalFiles(abs, arrayOfFiles);
+                    if (fs.readdirSync(abs).length === 0) {
+                        self.logger.consoleAppend("dir: [" + abs + "] is empty.  adding to objects that need uploaded");
+                        arrayOfFiles.push(abs);
+                    } else {
+                        arrayOfFiles = self.listLocalFiles(abs, arrayOfFiles);
+                    }
                 }
             } else {
                 arrayOfFiles.push(abs)
