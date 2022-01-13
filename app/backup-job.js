@@ -283,20 +283,20 @@ class BackupJob {
 
     // list all of the s3 keys
     async listS3Keys(params, allKeys) {
-        var self = this;
+        //var self = this;
         let data = await this.s3.listObjectsV2(params).promise();
         var contents = data.Contents;
         contents.forEach(function(content) {
             allKeys.push(content.Key);
         });
 
-        if (data.isTruncated) {
+        if (data.IsTruncated === true) {
             this.logger.consoleAppend("fetching continuation.");
             params.ContinuationToken = data.NextContinuationToken;
-            self.listS3Keys();
-        } else {
-            return allKeys;
-        }
+            allKeys = await this.listS3Keys(params, allKeys);
+        } 
+        
+        return allKeys;
     }
 
     // 
