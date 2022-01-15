@@ -69,7 +69,7 @@ class BackupJob {
 
         // if region is specified, then use it - else use the endpoint
         var s3 = null;
-        if (region) {
+        if (region !== "undefined") {
             AWS.config.update({region: region});
             s3  = new AWS.S3({
                 accessKeyId: accessKey,
