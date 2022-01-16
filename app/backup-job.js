@@ -325,6 +325,13 @@ class BackupJob {
                 this.logger.consoleAppend("[" + i + "] of [" + allKeys.length + "] - checking: " + k);
             } 
 
+            // if the key is encrypted - it will have a .enc on the end.  We need to 
+            // remove this before we check if the file exists locally.
+            if (k.substring(k.length - 4) === ".enc") {
+                this.logger.consoleAppend("[ " + k + "] - object is encrypted");
+                k = k.substring(k.length - 4);
+            }
+
             if (!this.isS3ObjectLocal(k, files) === true) {
                 this.logger.consoleAppend("[" + i + "] of [" + allKeys.length + "] did not find local file for key: [" + k + "] - deleting from s3");
                 let delResult = await this.s3.deleteObject({Bucket: bucket, Key: k}).promise();
