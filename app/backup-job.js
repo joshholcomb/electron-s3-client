@@ -441,9 +441,10 @@ class BackupJob {
                 let encKey = this.config.get("encryption.passphrase");
                 let i = 1;
                 while (i < 3) {
+                    let md5 = await this.getMD5HashFromFile(f);
                     const uploadRes = await encryptor.encryptFileAndUploadStream(f, 
                         encKey, this.s3, bucket, 
-                        uploadKey);
+                        uploadKey, md5);
 
                     if (uploadRes.success === true) {
                         this.logger.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - [" + uploadKey + "] - s3 object uploaded");
@@ -534,9 +535,10 @@ class BackupJob {
             .pipe(ws);
 
         let self = this;
+        let md5 = await this.getMD5HashFromFile(f);
         var r = await new Promise((resolve, reject) => {
             var opts = {queueSize: 2, partSize: 1024 * 1024 * 10};
-            this.s3.upload({Bucket: bucket, Key: key, Body: body}, opts).
+            this.s3.upload({Bucket: bucket, Key: key, Body: body, ContentMD5: md5}, opts).
             on('httpUploadProgress', function(evt) {
                 self.logger.consoleAppend("Progress: " + evt.loaded + "/" +  evt.total);
             }).
@@ -591,23 +593,40 @@ class BackupJob {
         }
 
         objectExists = true;
+                
+
 
         // further checks 
+        let md5Match = false;
         let sizeSame = false;
-        
-        // check for file sizes
-        let s3size = data.ContentLength;
-        let stats = fs.statSync(f);
-        let localFileSize = stats.size;
-        if (localFileSize == s3size) {
-            sizeSame = true;
-            this.logger.consoleAppend("analyzing - file sizes match - skipping");
+
+        // see if there is a md5 on the s3 object.
+        let s3Etag = data.ETag;
+        s3Etag = s3Etag.replaceAll(/\"/g, '');
+        if (s3Etag) {
+            let localEtag = await this.getMD5EtagFromFile(f);
+            //this.logger.consoleAppend("analyzing - s3 object exists with etag [" + s3Etag + "] - local etag [" + localEtag + "]");
+            if (s3Etag == localEtag) {
+                this.logger.consoleAppend(f + " - md5 match - skipping");
+                md5Match = true;
+            }
+        } else {
+            // no md5 sum - check file sizes
+            this.logger.consoleAppend("analyzing - no s3 md5 - checking file sizes.");
+            let s3size = data.ContentLength;
+            let stats = fs.statSync(f);
+            let localFileSize = stats.length;
+            if (localFileSize == s3size) {
+                sizeSame = true;
+                this.logger.consoleAppend("analyzing - file sizes match - skipping");
+            }
         }
         
-        
-        // check tests
+        // if all of our tests passed, then do not upload
         if (objectExists === true) {
-            if (sizeSame == true) {
+            if (md5Match == true) {
+                doUpload = false;
+            } else if (sizeSame == true) {
                 doUpload = false;
             }
         } 
@@ -659,15 +678,26 @@ class BackupJob {
             }
 
             let stats = fs.statSync(fullPath);
-            let s3Length = data.ContentLength;
-            let localFileLength = stats.size;
-            if (s3Length !== localFileLength) {
-                this.logger.consoleAppend("s3 object exists, but has a different file size.  proceeding with download.");
-            } else {
-                this.logger.consoleAppend("s3 object exists and has the same file size - skipping");
-                return;
-            }
             
+            // see if we have a md5 sum
+            let s3Etag = data.ETag;
+            s3Etag = s3Etag.replaceAll(/\"/g, '');
+            if (s3Etag) {
+                let localEtag = await this.getMD5EtagFromFile(fullPath);
+                if (s3Etag == localEtag) {
+                    this.logger.consoleAppend(fullPath + " - s3 and local md5 checksums match - skipping.");
+                    return;
+                }
+            } else {
+                let s3Length = data.ContentLength;
+                let localFileLength = stats.size;
+                if (s3Length !== localFileLength) {
+                    this.logger.consoleAppend("s3 object exists, but has a different file size.  proceeding with download.");
+                } else {
+                    this.logger.consoleAppend("s3 object exists and has the same file size - skipping");
+                    return;
+                }
+            }
         }
     
         // download the object
@@ -748,6 +778,40 @@ class BackupJob {
     //
     async delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async getMD5HashFromFile(file) {
+        return new Promise(function (resolve, reject) {
+            const hash = crypt.createHash('md5');
+            const input = fs.createReadStream(file);
+        
+            input.on('error', reject);
+        
+            input.on('data', function (chunk) {
+            hash.update(chunk);
+            });
+        
+            input.on('close', function () {
+            resolve(hash.digest('base64'));
+            });
+        });
+    }
+
+    async getMD5EtagFromFile(file) {
+        return new Promise(function (resolve, reject) {
+            const hash = crypt.createHash('md5');
+            const input = fs.createReadStream(file);
+        
+            input.on('error', reject);
+        
+            input.on('data', function (chunk) {
+            hash.update(chunk);
+            });
+        
+            input.on('close', function () {
+            resolve(hash.digest('hex'));
+            });
+        });
     }
 
 
