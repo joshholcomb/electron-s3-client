@@ -10,7 +10,6 @@ const ProgressMonitor = require('./progress-monitor');
 const { PassThrough } = require("stream");
 const ConsoleLogger = require('./console-logger');
 const { Console } = require("console");
-const crypt = require('crypto');
 
 
 /*
@@ -441,10 +440,9 @@ class BackupJob {
                 let encKey = this.config.get("encryption.passphrase");
                 let i = 1;
                 while (i < 3) {
-                    let md5 = await this.getMD5HashFromFile(f);
                     const uploadRes = await encryptor.encryptFileAndUploadStream(f, 
                         encKey, this.s3, bucket, 
-                        uploadKey, md5);
+                        uploadKey);
 
                     if (uploadRes.success === true) {
                         this.logger.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - [" + uploadKey + "] - s3 object uploaded");
@@ -535,10 +533,9 @@ class BackupJob {
             .pipe(ws);
 
         let self = this;
-        let md5 = await this.getMD5HashFromFile(f);
         var r = await new Promise((resolve, reject) => {
             var opts = {queueSize: 2, partSize: 1024 * 1024 * 10};
-            this.s3.upload({Bucket: bucket, Key: key, Body: body, ContentMD5: md5}, opts).
+            this.s3.upload({Bucket: bucket, Key: key, Body: body}, opts).
             on('httpUploadProgress', function(evt) {
                 self.logger.consoleAppend("Progress: " + evt.loaded + "/" +  evt.total);
             }).
@@ -576,6 +573,7 @@ class BackupJob {
             params.Key = key + ".enc";
         }
 
+        let s3LastModified = null;
         let data = "";
         try {
             data = await this.s3.headObject(params).promise();
@@ -594,41 +592,26 @@ class BackupJob {
 
         objectExists = true;
                 
-
-
-        // further checks 
-        let md5Match = false;
-        let sizeSame = false;
-
-        // see if there is a md5 on the s3 object.
-        let s3Etag = data.ETag;
-        s3Etag = s3Etag.replaceAll(/\"/g, '');
-        if (s3Etag) {
-            let localEtag = await this.getMD5EtagFromFile(f);
-            //this.logger.consoleAppend("analyzing - s3 object exists with etag [" + s3Etag + "] - local etag [" + localEtag + "]");
-            if (s3Etag == localEtag) {
-                this.logger.consoleAppend(f + " - md5 match - skipping");
-                md5Match = true;
-            }
-        } else {
-            // no md5 sum - check file sizes
-            this.logger.consoleAppend("analyzing - no s3 md5 - checking file sizes.");
-            let s3size = data.ContentLength;
+        // see if local timestamp is newer
+        s3LastModified = data.LastModified;
+        let localFileLastModified = null;
+        try {
             let stats = fs.statSync(f);
-            let localFileSize = stats.length;
-            if (localFileSize == s3size) {
-                sizeSame = true;
-                this.logger.consoleAppend("analyzing - file sizes match - skipping");
-            }
+            localFileLastModified = stats.mtime;
+
+            let localDate = new Date(localFileLastModified);
+            let s3Date = new Date(s3LastModified);
+            if (localDate > s3Date) {
+                s3Outdated = true;
+            } 
+        } catch (error) {
+            this.logger.consoleAppend("error checking dates for file [" + f + "] - assume outdated.");
+            s3Outdated = true;
         }
         
         // if all of our tests passed, then do not upload
-        if (objectExists === true) {
-            if (md5Match == true) {
-                doUpload = false;
-            } else if (sizeSame == true) {
-                doUpload = false;
-            }
+        if (objectExists === true && s3Outdated === false) {
+            doUpload = false;
         } 
 
         return(doUpload);
@@ -648,7 +631,7 @@ class BackupJob {
         let writeFile = key.substring(key.lastIndexOf("/") + 1);
         writeDir = writeDir.replace(/\//g, '\\');
         let fullPath = writeDir + "\\" + writeFile;
-        this.logger.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - starting object: " + key);
+        this.logger.consoleAppend("[" + stats.fCounter + " - " + stats.fCount + "] - downloading object: " + key);
     
         // make sure target directory exists on local folder
         fs.mkdirSync(writeDir, { recursive: true});
@@ -657,55 +640,17 @@ class BackupJob {
             Bucket: bucket,
             Key: key
         }
-
-        //
-        // if file exists locally, then we should check some mtimes before overwriting the local file.
-        //
-        if (fs.existsSync(fullPath)) {
-
-            let data = "";
-            try {
-                data = await this.s3.headObject(params).promise();
-            }  catch (err) {
-                if (err.code === 'NotFound') {
-                    this.logger.consoleAppend("s3 headObject : object not found in s3 - skipping.");
-                    return;
-                } else if (err.code === 'UnknownEndpoint') {
-                    this.logger.consoleAppend("s3 headObject : cannot contact host - runStatus to false");
-                    this.runStatus = false;
-                    return;
-                }
-            }
-
-            let stats = fs.statSync(fullPath);
-            
-            // see if we have a md5 sum
-            let s3Etag = data.ETag;
-            s3Etag = s3Etag.replaceAll(/\"/g, '');
-            if (s3Etag) {
-                let localEtag = await this.getMD5EtagFromFile(fullPath);
-                if (s3Etag == localEtag) {
-                    this.logger.consoleAppend(fullPath + " - s3 and local md5 checksums match - skipping.");
-                    return;
-                }
-            } else {
-                let s3Length = data.ContentLength;
-                let localFileLength = stats.size;
-                if (s3Length !== localFileLength) {
-                    this.logger.consoleAppend("s3 object exists, but has a different file size.  proceeding with download.");
-                } else {
-                    this.logger.consoleAppend("s3 object exists and has the same file size - skipping");
-                    return;
-                }
-            }
-        }
     
         // download the object
-        // if encrypted - call method to download and decrypt
         if (key.substring(key.length - 4) === ".enc") {
             let e = new Encryptor();
             try {
                 fullPath = fullPath.substring(0, fullPath.length - 4);
+
+                if (fs.existsSync(fullPath)) {
+                    this.logger.consoleAppend("object exists in restore point - skipping...");
+                    return;
+                }
 
                 await e.downloadStreamAndDecrypt(this.s3, 
                     bucket, key, 
@@ -713,12 +658,24 @@ class BackupJob {
                     fullPath,
                     this.guimode
                 );
+                //await this.delay(1000);
 
             } catch (err) {
                 console.log("error : " + err);
             }
         } else {
-            // object not encrypted - just download the object without decryption
+            if (fs.existsSync(fullPath)) {
+                let data = "";
+                data = await this.s3.headObject(params).promise();
+                let stats = fs.statSync(fullPath);
+                let s3Date = new Date(data.LastModified);
+                let fileDate = new Date(stats.mtime);
+                if (fileDate > s3Date) {
+                    this.logger.consoleAppend("file already exists on restore point and is current - skipping.");
+                    return;
+                }
+            }
+            
             let readStream = this.s3.getObject(params).createReadStream();
             let fileSize = 0;
             let pm = new ProgressMonitor(fileSize, this.logger, key);
@@ -778,40 +735,6 @@ class BackupJob {
     //
     async delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    async getMD5HashFromFile(file) {
-        return new Promise(function (resolve, reject) {
-            const hash = crypt.createHash('md5');
-            const input = fs.createReadStream(file);
-        
-            input.on('error', reject);
-        
-            input.on('data', function (chunk) {
-            hash.update(chunk);
-            });
-        
-            input.on('close', function () {
-            resolve(hash.digest('base64'));
-            });
-        });
-    }
-
-    async getMD5EtagFromFile(file) {
-        return new Promise(function (resolve, reject) {
-            const hash = crypt.createHash('md5');
-            const input = fs.createReadStream(file);
-        
-            input.on('error', reject);
-        
-            input.on('data', function (chunk) {
-            hash.update(chunk);
-            });
-        
-            input.on('close', function () {
-            resolve(hash.digest('hex'));
-            });
-        });
     }
 
 

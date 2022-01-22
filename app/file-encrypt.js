@@ -9,7 +9,6 @@ const stream = require('stream');
 const logger = require('./console-logger');
 
 
-
 class Encryptor {
 
     logger;
@@ -66,7 +65,7 @@ class Encryptor {
             .pipe(writeStream);
     }
 
-    async encryptFileAndUploadStream(inFile, password, s3, bucket, key, md5) {
+    async encryptFileAndUploadStream(inFile, password, s3, bucket, key) {
         let resObj = { success: false, errCode: 'none'};
         
         let initVect = crypto.randomBytes(16);
@@ -85,7 +84,7 @@ class Encryptor {
         let self = this;
         var r = await new Promise((resolve, reject) => {
             var opts = {queueSize: 2, partSize: 1024 * 1024 * 10};
-            s3.upload({Bucket: bucket, Key: key, Body: body, ContentMD5: md5}, opts).
+            s3.upload({Bucket: bucket, Key: key, Body: body}, opts).
             on('httpUploadProgress', function(evt) {
                 self.logger.consoleAppend("Progress: " + evt.loaded + "/" +  evt.total);
             }).
