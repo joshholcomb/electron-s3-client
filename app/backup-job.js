@@ -29,6 +29,7 @@ class BackupJob {
     errorFiles;         // keep a running list of errors
     numThreads = 1;     // number of threads for this job
     threadKbps = 200;   // throttle in KBps per thread
+    jobStartTime;       // start time of the backup job
     logger;
 
     // private variables
@@ -38,6 +39,7 @@ class BackupJob {
         this.config = config;
         this.certFile = certFile;
         this.errorFiles = [];
+        this.jobStartTime = Date.now();
         this.guimode = guimode;
 
         this.logger = new ConsoleLogger(guimode);
@@ -227,8 +229,15 @@ class BackupJob {
         }
 
         Promise.all(promises).then(() => {
+            // report the start time in final output
+            var st = new Date(this.jobStartTime);
+            var et = new Date();
+            this.logger.consoleAppend(" ");
             this.logger.consoleAppend("====================");
             this.logger.consoleAppend("backup job finished.");
+            this.logger.consoleAppend("start time: " + st);
+            this.logger.consoleAppend("end time: " + et);
+            this.logger.consoleAppend("files processed: " + files.length);
             this.logger.consoleAppend("====error files====");
             if (this.errorFiles.length === 0) {
                 this.logger.consoleAppend("no error files");
